@@ -1,0 +1,67 @@
+{
+  "common": {
+    "signIn": "Sign In",
+    "signUp": "Sign Up",
+    "email": "Email",
+    "password": "Password",
+    "forgotPassword": "Forgot password?",
+    "keepMeLoggedIn": "Keep me logged in",
+    "backToDashboard": "Back to dashboard",
+    "enterEmailPassword": "Enter your email and password to sign in!",
+    "contactAdmin": "Contact Administrator for an account.",
+    "search": "Search or type command...",
+    "language": "Language",
+    "menu": "Menu",
+    "others": "Others"
+  },
+  "auth": {
+    "signInTitle": "Sign In",
+    "signUpTitle": "Sign Up",
+    "emailPlaceholder": "info@gmail.com",
+    "passwordPlaceholder": "Enter your password"
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "welcome": "Welcome",
+    "ecommerce": "Ecommerce",
+    "customers": "Customers",
+    "orders": "Orders",
+    "products": "Products",
+    "revenue": "Revenue",
+    "monthlySales": "Monthly Sales",
+    "monthlyTarget": "Monthly Target",
+    "statistics": "Statistics",
+    "recentOrders": "Recent Orders",
+    "demographics": "Demographics"
+  },
+  "sidebar": {
+    "dashboard": "Dashboard",
+    "calendar": "Calendar",
+    "userProfile": "User Profile",
+    "forms": "Forms",
+    "formElements": "Form Elements",
+    "tables": "Tables",
+    "basicTables": "Basic Tables",
+    "pages": "Pages",
+    "blankPage": "Blank Page",
+    "error404": "404 Error",
+    "charts": "Charts",
+    "lineChart": "Line Chart",
+    "barChart": "Bar Chart",
+    "uiElements": "UI Elements",
+    "alerts": "Alerts",
+    "avatar": "Avatar",
+    "badge": "Badge",
+    "buttons": "Buttons",
+    "images": "Images",
+    "videos": "Videos",
+    "authentication": "Authentication",
+    "signIn": "Sign In",
+    "signUp": "Sign Up"
+  },
+  "header": {
+    "toggleSidebar": "Toggle Sidebar",
+    "searchPlaceholder": "Search or type command..."
+  }
+}
+

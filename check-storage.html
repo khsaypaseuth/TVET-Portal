@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head><title>Storage Check</title></head>
+<body>
+<script>
+function getStorageSize() {
+  let total = 0;
+  for (let key in localStorage) {
+    if (localStorage.hasOwnProperty(key)) {
+      total += localStorage[key].length + key.length;
+    }
+  }
+  return total;
+}
+console.log('LocalStorage size:', (getStorageSize() / 1024).toFixed(2), 'KB');
+console.log('Keys:', Object.keys(localStorage));
+Object.keys(localStorage).forEach(key => {
+  console.log(key + ':', (localStorage[key].length / 1024).toFixed(2), 'KB');
+});
+</script>
+</body>
+</html>

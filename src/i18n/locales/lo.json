@@ -1,0 +1,67 @@
+{
+  "common": {
+    "signIn": "ເຂົ້າສູ່ລະບົບ",
+    "signUp": "ລົງທະບຽນ",
+    "email": "ອີເມວ",
+    "password": "ລະຫັດຜ່ານ",
+    "forgotPassword": "ລືມລະຫັດຜ່ານ?",
+    "keepMeLoggedIn": "ຈື່ການເຂົ້າສູ່ລະບົບ",
+    "backToDashboard": "ກັບໄປໜ້າຫຼັກ",
+    "enterEmailPassword": "ກະລຸນາໃສ່ອີເມວແລະລະຫັດຜ່ານເພື່ອເຂົ້າສູ່ລະບົບ!",
+    "contactAdmin": "ຕິດຕໍ່ຜູ້ບໍລິຫານເພື່ອຂໍບັນຊີ.",
+    "search": "ຄົ້ນຫາຫຼືພິມຄຳສັ່ງ...",
+    "language": "ພາສາ",
+    "menu": "ເມນູ",
+    "others": "ອື່ນໆ"
+  },
+  "auth": {
+    "signInTitle": "ເຂົ້າສູ່ລະບົບ",
+    "signUpTitle": "ລົງທະບຽນ",
+    "emailPlaceholder": "info@gmail.com",
+    "passwordPlaceholder": "ກະລຸນາໃສ່ລະຫັດຜ່ານ"
+  },
+  "dashboard": {
+    "title": "ໜ້າຫຼັກ",
+    "welcome": "ຍິນດີຕ້ອນຮັບ",
+    "ecommerce": "ການຄ້າອອນລາຍ",
+    "customers": "ລູກຄ້າ",
+    "orders": "ຄຳສັ່ງຊື້",
+    "products": "ສິນຄ້າ",
+    "revenue": "ລາຍໄດ້",
+    "monthlySales": "ການຂາຍລາຍເດືອນ",
+    "monthlyTarget": "ເປົ້າໝາຍລາຍເດືອນ",
+    "statistics": "ສະຖິຕິ",
+    "recentOrders": "ຄຳສັ່ງຊື້ຫຼ້າສຸດ",
+    "demographics": "ຂໍ້ມູນປະຊາກອນ"
+  },
+  "sidebar": {
+    "dashboard": "ໜ້າຫຼັກ",
+    "calendar": "ປະຕິທິນ",
+    "userProfile": "ໂປຣໄຟລ໌ຜູ້ໃຊ້",
+    "forms": "ແບບຟອມ",
+    "formElements": "ອົງປະກອບແບບຟອມ",
+    "tables": "ຕາຕະລາງ",
+    "basicTables": "ຕາຕະລາງພື້ນຖານ",
+    "pages": "ໜ້າ",
+    "blankPage": "ໜ້າວ່າງ",
+    "error404": "ຂໍ້ຜິດພາດ 404",
+    "charts": "ແຜນວາດ",
+    "lineChart": "ແຜນວາດເສັ້ນ",
+    "barChart": "ແຜນວາດແຖບ",
+    "uiElements": "ອົງປະກອບ UI",
+    "alerts": "ການແຈ້ງເຕືອນ",
+    "avatar": "ຮູບພາບ",
+    "badge": "ແຖບ",
+    "buttons": "ປຸ່ມ",
+    "images": "ຮູບພາບ",
+    "videos": "ວິດີໂອ",
+    "authentication": "ການຢືນຢັນຕົວຕົນ",
+    "signIn": "ເຂົ້າສູ່ລະບົບ",
+    "signUp": "ລົງທະບຽນ"
+  },
+  "header": {
+    "toggleSidebar": "ເປີດ/ປິດແຖບຂ້າງ",
+    "searchPlaceholder": "ຄົ້ນຫາຫຼືພິມຄຳສັ່ງ..."
+  }
+}
+
