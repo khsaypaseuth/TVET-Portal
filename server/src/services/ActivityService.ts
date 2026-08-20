@@ -4,6 +4,9 @@ import { HierarchyService } from './HierarchyService.js';
 import { ActivityPolicy } from '../policies/ActivityPolicy.js';
 import { writeAuditLog } from './AuditService.js';
 
+/** Upper bound on rows any single list/export request may return. */
+export const EXPORT_MAX_ROWS = 5000;
+
 export interface ActivityInput {
   user_id?: number;
   division_id?: number | null;
@@ -113,6 +116,8 @@ export const ActivityService = {
       activity_type_id?: number;
       user_id?: number;
       division_id?: number;
+      limit?: number;
+      offset?: number;
     } = {}
   ) {
     const visible = await HierarchyService.visibleUserIds(me);
@@ -144,19 +149,33 @@ export const ActivityService = {
       where += ` AND a.division_id = $${params.length}`;
     }
 
+    const total = await pool.query(
+      `SELECT COUNT(*)::int AS count FROM activities a WHERE ${where}`,
+      params
+    );
+
+    // A page size of 0 means "no paging" — used by the exporters, capped so a
+    // single request can never pull the whole table.
+    const limit = Math.min(Math.max(filters.limit ?? 500, 0) || EXPORT_MAX_ROWS, EXPORT_MAX_ROWS);
+    const offset = Math.max(filters.offset ?? 0, 0);
+    params.push(limit, offset);
+
     const result = await pool.query(
       `SELECT a.*,
               at.code AS type_code, at.name_lo AS type_name_lo, at.name_en AS type_name_en, at.colour AS type_colour,
-              u.full_name AS owner_name, u.staff_code AS owner_staff_code
+              u.full_name AS owner_name, u.staff_code AS owner_staff_code,
+              d.name_lo AS division_name_lo, d.name_en AS division_name_en
        FROM activities a
        JOIN activity_types at ON at.id = a.activity_type_id
        JOIN users u ON u.id = a.user_id
+       LEFT JOIN divisions d ON d.id = a.division_id
        WHERE ${where}
        ORDER BY a.start_date DESC, a.start_time DESC NULLS LAST
-       LIMIT 500`,
+       LIMIT $${params.length - 1} OFFSET $${params.length}`,
       params
     );
-    return result.rows;
+
+    return { rows: result.rows, total: total.rows[0].count as number, limit, offset };
   },
 
   async getById(me: HierarchyUser, id: number) {

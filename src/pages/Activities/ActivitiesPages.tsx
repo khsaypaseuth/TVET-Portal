@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import PageMeta from '../../components/common/PageMeta';
 import ActionIcons from '../../components/common/ActionIcons';
 import { apiService } from '../../services/api';
+import type { ActivityListMeta } from '../../services/api';
 import { PlusIcon } from '../../icons';
 
 function computeLiveDuration(form: {
@@ -26,24 +27,74 @@ function computeLiveDuration(form: {
   return days * 8 * 60;
 }
 
+const PAGE_SIZES = [20, 50, 100];
+
 export function ActivityListPage() {
   const { t, i18n } = useTranslation();
   const [rows, setRows] = useState<any[]>([]);
+  const [meta, setMeta] = useState<ActivityListMeta | null>(null);
   const [status, setStatus] = useState('');
+  const [limit, setLimit] = useState(PAGE_SIZES[0]);
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState<'filtered' | 'all' | null>(null);
 
-  const load = () => {
+  // The filters the list and both exports share.
+  const filters = { status: status || undefined, lang: i18n.language };
+
+  const load = (targetPage = page) => {
     setLoading(true);
     apiService
-      .getActivities({ status: status || undefined })
-      .then((r) => setRows(r.data))
+      .getActivities({ ...filters, limit, page: targetPage })
+      .then((r) => {
+        setRows(r.data);
+        setMeta(r.meta ?? null);
+      })
       .catch(console.error)
       .finally(() => setLoading(false));
   };
 
   useEffect(() => {
-    load();
-  }, [status]);
+    load(page);
+  }, [status, limit, page]);
+
+  // Any change to the filter or page size invalidates the current page number.
+  const onStatusChange = (value: string) => {
+    setStatus(value);
+    setPage(1);
+  };
+  const onLimitChange = (value: number) => {
+    setLimit(value);
+    setPage(1);
+  };
+
+  const onExport = async (scope: 'filtered' | 'all') => {
+    setExporting(scope);
+    try {
+      const { blob, filename } = await apiService.downloadActivitiesExcel(filters, scope);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (e: any) {
+      alert(e.message || t('common.exportFailed'));
+    } finally {
+      setExporting(null);
+    }
+  };
+
+  const total = meta?.total ?? rows.length;
+  const from = total === 0 ? 0 : (page - 1) * limit + 1;
+  const to = total === 0 ? 0 : from + rows.length - 1;
+
+  const pagerButton =
+    'rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-white/[0.03]';
+  const exportButton =
+    'inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-white/[0.03]';
 
   return (
     <>
@@ -55,18 +106,42 @@ export function ActivityListPage() {
           {t('activities.new')}
         </Link>
       </div>
-      <div className="mb-4">
+
+      <div className="mb-4 flex flex-wrap items-center gap-3">
         <select
           className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
           value={status}
-          onChange={(e) => setStatus(e.target.value)}
+          onChange={(e) => onStatusChange(e.target.value)}
         >
           <option value="">{t('common.all')}</option>
           {['draft', 'submitted', 'approved', 'rejected'].map((s) => (
             <option key={s} value={s}>{s}</option>
           ))}
         </select>
+
+        <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+          {t('common.rowsPerPage')}
+          <select
+            className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
+            value={limit}
+            onChange={(e) => onLimitChange(Number(e.target.value))}
+          >
+            {PAGE_SIZES.map((size) => (
+              <option key={size} value={size}>{size}</option>
+            ))}
+          </select>
+        </label>
+
+        <div className="ms-auto flex flex-wrap gap-2">
+          <button type="button" className={exportButton} disabled={exporting !== null} onClick={() => onExport('filtered')}>
+            {exporting === 'filtered' ? t('common.exporting') : t('common.exportFiltered')}
+          </button>
+          <button type="button" className={exportButton} disabled={exporting !== null} onClick={() => onExport('all')}>
+            {exporting === 'all' ? t('common.exporting') : t('common.exportAll')}
+          </button>
+        </div>
       </div>
+
       <div className="overflow-x-auto rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
         <table className="min-w-full text-sm">
           <thead className="border-b border-gray-200 bg-gray-50 dark:border-gray-800 dark:bg-white/[0.02]">
@@ -83,7 +158,7 @@ export function ActivityListPage() {
             {loading ? (
               <tr><td className="px-4 py-6 text-gray-500 dark:text-gray-400" colSpan={6}>{t('common.loading')}</td></tr>
             ) : rows.length === 0 ? (
-              <tr><td className="px-4 py-6 text-gray-400" colSpan={6}>—</td></tr>
+              <tr><td className="px-4 py-6 text-gray-400" colSpan={6}>{t('common.noRecords')}</td></tr>
             ) : (
               rows.map((row) => (
                 <tr key={row.id} className="border-b border-gray-100 dark:border-gray-800">
@@ -103,7 +178,7 @@ export function ActivityListPage() {
                           row.status === 'draft'
                             ? () => {
                                 if (confirm(t('common.confirmDelete'))) {
-                                  apiService.deleteActivity(row.id).then(load);
+                                  apiService.deleteActivity(row.id).then(() => load(page));
                                 }
                               }
                             : undefined
@@ -112,7 +187,7 @@ export function ActivityListPage() {
                       <button
                         type="button"
                         className="text-xs text-brand-500 hover:underline dark:text-brand-400"
-                        onClick={() => apiService.duplicateActivity(row.id).then(load)}
+                        onClick={() => apiService.duplicateActivity(row.id).then(() => load(page))}
                       >
                         {t('common.duplicate')}
                       </button>
@@ -123,6 +198,33 @@ export function ActivityListPage() {
             )}
           </tbody>
         </table>
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-gray-500 dark:text-gray-400">
+          {t('common.showingRange', { from, to, total })}
+        </p>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className={pagerButton}
+            disabled={loading || page <= 1}
+            onClick={() => setPage((p) => Math.max(p - 1, 1))}
+          >
+            {t('common.previous')}
+          </button>
+          <span className="px-2 text-sm text-gray-600 dark:text-gray-400">
+            {t('common.page', { page, pages: meta?.pages ?? 1 })}
+          </span>
+          <button
+            type="button"
+            className={pagerButton}
+            disabled={loading || !(meta?.has_next ?? false)}
+            onClick={() => setPage((p) => p + 1)}
+          >
+            {t('common.next')}
+          </button>
+        </div>
       </div>
     </>
   );

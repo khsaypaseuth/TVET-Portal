@@ -57,7 +57,17 @@
     "division": "Division",
     "position": "Position",
     "supervisor": "Supervisor",
-    "details": "Details"
+    "details": "Details",
+    "previous": "Previous",
+    "next": "Next",
+    "rowsPerPage": "Rows per page",
+    "showingRange": "Showing {{from}}–{{to}} of {{total}}",
+    "page": "Page {{page}} of {{pages}}",
+    "exportFiltered": "Export (filter)",
+    "exportAll": "Export all",
+    "exporting": "Exporting…",
+    "exportFailed": "Export failed",
+    "noRecords": "No records found"
   },
   "auth": {
     "signInTitle": "Sign In",

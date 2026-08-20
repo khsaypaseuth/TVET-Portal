@@ -12,9 +12,15 @@ export default function ActivityCalendarPage() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const [events, setEvents] = useState<any[]>([]);
+  // The window FullCalendar is currently showing; activities are fetched per view
+  // rather than in one unbounded request.
+  const [range, setRange] = useState<{ start: string; end: string } | null>(null);
 
   useEffect(() => {
-    apiService.getActivities().then((r) => {
+    if (!range) return;
+    apiService
+      .getActivities({ start_date: range.start, end_date: range.end, all: 1 })
+      .then((r) => {
       setEvents(
         r.data.map((a: any) => ({
           id: String(a.id),
@@ -29,8 +35,9 @@ export default function ActivityCalendarPage() {
           allDay: !!a.is_all_day,
         }))
       );
-    });
-  }, [i18n.language]);
+      })
+      .catch(console.error);
+  }, [i18n.language, range]);
 
   return (
     <>
@@ -46,6 +53,12 @@ export default function ActivityCalendarPage() {
             right: 'dayGridMonth,timeGridWeek',
           }}
           events={events}
+          datesSet={(info) =>
+            setRange({
+              start: info.startStr.slice(0, 10),
+              end: info.endStr.slice(0, 10),
+            })
+          }
           eventClick={(info) => navigate(`/activities/${info.event.id}`)}
           height="auto"
         />

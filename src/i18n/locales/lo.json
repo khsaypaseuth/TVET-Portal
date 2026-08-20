@@ -57,7 +57,17 @@
     "division": "ພະແນກ",
     "position": "ຕຳແໜ່ງ",
     "supervisor": "ຫົວໜ້າ",
-    "details": "ລາຍລະອຽດ"
+    "details": "ລາຍລະອຽດ",
+    "previous": "ກ່ອນໜ້າ",
+    "next": "ຕໍ່ໄປ",
+    "rowsPerPage": "ຈຳນວນແຖວຕໍ່ໜ້າ",
+    "showingRange": "ສະແດງ {{from}}–{{to}} ຈາກ {{total}}",
+    "page": "ໜ້າ {{page}} ຈາກ {{pages}}",
+    "exportFiltered": "ສົ່ງອອກ (ຕາມການກັ່ນຕອງ)",
+    "exportAll": "ສົ່ງອອກທັງໝົດ",
+    "exporting": "ກຳລັງສົ່ງອອກ…",
+    "exportFailed": "ສົ່ງອອກບໍ່ສຳເລັດ",
+    "noRecords": "ບໍ່ພົບຂໍ້ມູນ"
   },
   "auth": {
     "signInTitle": "ເຂົ້າສູ່ລະບົບ",

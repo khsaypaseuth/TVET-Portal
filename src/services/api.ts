@@ -2,6 +2,23 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api'
 
 import { storage } from '../utils/storage';
 
+export interface ActivityListMeta {
+  total: number;
+  page: number;
+  limit: number;
+  pages: number;
+  has_prev: boolean;
+  has_next: boolean;
+}
+
+function toQuery(params: Record<string, string | number | undefined>) {
+  const q = new URLSearchParams();
+  Object.entries(params).forEach(([k, v]) => {
+    if (v !== undefined && v !== '') q.set(k, String(v));
+  });
+  return q.toString();
+}
+
 export interface User {
   id: number;
   username: string;
@@ -162,12 +179,27 @@ class ApiService {
     return this.request<{ success: boolean; data: any[] }>('/activities/types');
   }
   getActivities(params: Record<string, string | number | undefined> = {}) {
-    const q = new URLSearchParams();
-    Object.entries(params).forEach(([k, v]) => {
-      if (v !== undefined && v !== '') q.set(k, String(v));
+    const qs = toQuery(params);
+    return this.request<{ success: boolean; data: any[]; meta?: ActivityListMeta }>(
+      `/activities${qs ? `?${qs}` : ''}`
+    );
+  }
+  /** Downloads the activity list as .xlsx — either the current filter, or everything visible. */
+  async downloadActivitiesExcel(
+    params: Record<string, string | number | undefined> = {},
+    scope: 'filtered' | 'all' = 'filtered'
+  ) {
+    const qs = toQuery(scope === 'all' ? { all: 1, lang: params.lang } : params);
+    const res = await fetch(`${API_BASE_URL}/activities/excel?${qs}`, {
+      headers: { Authorization: `Bearer ${this.getAuthToken()}` },
     });
-    const qs = q.toString();
-    return this.request<{ success: boolean; data: any[] }>(`/activities${qs ? `?${qs}` : ''}`);
+    if (!res.ok) throw new Error('Export failed');
+    const disposition = res.headers.get('Content-Disposition') || '';
+    const match = disposition.match(/filename="?([^";]+)"?/);
+    return {
+      blob: await res.blob(),
+      filename: match?.[1] || `tved-activities-${scope}.xlsx`,
+    };
   }
   getActivity(id: number) {
     return this.request<{ success: boolean; data: any }>(`/activities/${id}`);

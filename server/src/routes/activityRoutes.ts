@@ -4,6 +4,7 @@ import { authenticateToken } from '../middleware/auth.js';
 import {
   listActivityTypes,
   listActivities,
+  exportActivitiesExcel,
   getActivity,
   createActivity,
   updateActivity,
@@ -44,6 +45,7 @@ router.use(authenticateToken);
 router.get('/types', listActivityTypes);
 router.get('/approvals', approvalsQueue);
 router.get('/team', myTeam);
+router.get('/excel', exportActivitiesExcel);
 router.get('/', listActivities);
 router.post('/approvals/bulk', bulkApprove);
 router.post('/', createActivity);
