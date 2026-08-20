@@ -40,6 +40,7 @@ function parseActivityFilters(query: AuthRequest['query']) {
     activity_type_id: query.activity_type_id ? Number(query.activity_type_id) : undefined,
     user_id: query.user_id ? Number(query.user_id) : undefined,
     division_id: query.division_id ? Number(query.division_id) : undefined,
+    q: (query.q as string | undefined) || undefined,
   };
 }
 

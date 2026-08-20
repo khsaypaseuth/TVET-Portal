@@ -116,6 +116,7 @@ export const ActivityService = {
       activity_type_id?: number;
       user_id?: number;
       division_id?: number;
+      q?: string;
       limit?: number;
       offset?: number;
     } = {}
@@ -147,6 +148,12 @@ export const ActivityService = {
     if (filters.division_id) {
       params.push(filters.division_id);
       where += ` AND a.division_id = $${params.length}`;
+    }
+    if (filters.q && filters.q.trim()) {
+      params.push(`%${filters.q.trim()}%`);
+      where += ` AND (a.title_lo ILIKE $${params.length}
+                  OR a.title_en ILIKE $${params.length}
+                  OR a.location ILIKE $${params.length})`;
     }
 
     const total = await pool.query(

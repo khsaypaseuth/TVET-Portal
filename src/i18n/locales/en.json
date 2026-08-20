@@ -67,7 +67,15 @@
     "exportAll": "Export all",
     "exporting": "Exporting…",
     "exportFailed": "Export failed",
-    "noRecords": "No records found"
+    "noRecords": "No records found",
+    "reset": "Reset",
+    "searchActivities": "Search title or location",
+    "allTypes": "All types",
+    "allStatuses": "All statuses",
+    "allStaff": "All staff",
+    "allDivisions": "All divisions",
+    "myRecords": "My own records",
+    "filters": "Filters"
   },
   "auth": {
     "signInTitle": "Sign In",

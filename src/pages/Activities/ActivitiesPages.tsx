@@ -5,6 +5,7 @@ import PageMeta from '../../components/common/PageMeta';
 import ActionIcons from '../../components/common/ActionIcons';
 import { apiService } from '../../services/api';
 import type { ActivityListMeta } from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 import { PlusIcon } from '../../icons';
 
 function computeLiveDuration(form: {
@@ -28,24 +29,70 @@ function computeLiveDuration(form: {
 }
 
 const PAGE_SIZES = [20, 50, 100];
+const STATUSES = ['draft', 'submitted', 'approved', 'rejected', 'cancelled'];
+
+const EMPTY_FILTERS = {
+  q: '',
+  status: '',
+  activity_type_id: '',
+  start_date: '',
+  end_date: '',
+  user_id: '',
+  division_id: '',
+};
+
+const controlClass =
+  'rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90';
 
 export function ActivityListPage() {
   const { t, i18n } = useTranslation();
+  const { user } = useAuth();
   const [rows, setRows] = useState<any[]>([]);
   const [meta, setMeta] = useState<ActivityListMeta | null>(null);
-  const [status, setStatus] = useState('');
+  const [filters, setFilters] = useState({ ...EMPTY_FILTERS });
+  const [search, setSearch] = useState('');
+  const [types, setTypes] = useState<any[]>([]);
+  const [team, setTeam] = useState<any[]>([]);
+  const [divisions, setDivisions] = useState<any[]>([]);
   const [limit, setLimit] = useState(PAGE_SIZES[0]);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState<'filtered' | 'all' | null>(null);
 
-  // The filters the list and both exports share.
-  const filters = { status: status || undefined, lang: i18n.language };
+  // Which filters a user may use follows their data scope, not their opinion —
+  // the server scopes the query regardless, this only hides useless controls.
+  const scope = user?.data_scope || 'own';
+  const canFilterStaff = scope !== 'own';
+  const canFilterDivision = scope === 'department' || scope === 'assigned_divisions';
 
-  const load = (targetPage = page) => {
+  useEffect(() => {
+    apiService.getActivityTypes().then((r) => setTypes(r.data)).catch(console.error);
+    if (canFilterStaff) {
+      apiService.getMyTeam().then((r) => setTeam(r.data)).catch(console.error);
+    }
+    if (canFilterDivision) {
+      apiService.getDivisions().then((r) => setDivisions(r.data)).catch(console.error);
+    }
+  }, [canFilterStaff, canFilterDivision]);
+
+  // Typing shouldn't fire a request per keystroke.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setFilters((f) => (f.q === search ? f : { ...f, q: search }));
+      setPage(1);
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  const queryParams = {
+    ...Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== '')),
+    lang: i18n.language,
+  };
+
+  const load = () => {
     setLoading(true);
     apiService
-      .getActivities({ ...filters, limit, page: targetPage })
+      .getActivities({ ...queryParams, limit, page })
       .then((r) => {
         setRows(r.data);
         setMeta(r.meta ?? null);
@@ -55,23 +102,27 @@ export function ActivityListPage() {
   };
 
   useEffect(() => {
-    load(page);
-  }, [status, limit, page]);
+    load();
+  }, [JSON.stringify(filters), limit, page]);
 
-  // Any change to the filter or page size invalidates the current page number.
-  const onStatusChange = (value: string) => {
-    setStatus(value);
-    setPage(1);
-  };
-  const onLimitChange = (value: number) => {
-    setLimit(value);
+  // Any filter change invalidates the current page number.
+  const setFilter = (key: keyof typeof EMPTY_FILTERS, value: string) => {
+    setFilters((f) => ({ ...f, [key]: value }));
     setPage(1);
   };
 
-  const onExport = async (scope: 'filtered' | 'all') => {
-    setExporting(scope);
+  const resetFilters = () => {
+    setSearch('');
+    setFilters({ ...EMPTY_FILTERS });
+    setPage(1);
+  };
+
+  const activeFilterCount = Object.entries(filters).filter(([, v]) => v !== '').length;
+
+  const onExport = async (exportScope: 'filtered' | 'all') => {
+    setExporting(exportScope);
     try {
-      const { blob, filename } = await apiService.downloadActivitiesExcel(filters, scope);
+      const { blob, filename } = await apiService.downloadActivitiesExcel(queryParams, exportScope);
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -107,38 +158,135 @@ export function ActivityListPage() {
         </Link>
       </div>
 
-      <div className="mb-4 flex flex-wrap items-center gap-3">
-        <select
-          className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
-          value={status}
-          onChange={(e) => onStatusChange(e.target.value)}
-        >
-          <option value="">{t('common.all')}</option>
-          {['draft', 'submitted', 'approved', 'rejected'].map((s) => (
-            <option key={s} value={s}>{s}</option>
-          ))}
-        </select>
+      {/* Filter bar */}
+      <div className="mb-4 rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-white/[0.03]">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+            {t('common.filters')}
+            {activeFilterCount > 0 && (
+              <span className="ms-2 rounded-full bg-brand-50 px-2 py-0.5 text-xs text-brand-600 dark:bg-brand-500/15 dark:text-brand-400">
+                {activeFilterCount}
+              </span>
+            )}
+          </span>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className={pagerButton}
+              disabled={activeFilterCount === 0 && search === ''}
+              onClick={resetFilters}
+            >
+              {t('common.reset')}
+            </button>
+            <button type="button" className={exportButton} disabled={exporting !== null} onClick={() => onExport('filtered')}>
+              {exporting === 'filtered' ? t('common.exporting') : t('common.exportFiltered')}
+            </button>
+            <button type="button" className={exportButton} disabled={exporting !== null} onClick={() => onExport('all')}>
+              {exporting === 'all' ? t('common.exporting') : t('common.exportAll')}
+            </button>
+          </div>
+        </div>
 
-        <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-          {t('common.rowsPerPage')}
-          <select
-            className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
-            value={limit}
-            onChange={(e) => onLimitChange(Number(e.target.value))}
-          >
-            {PAGE_SIZES.map((size) => (
-              <option key={size} value={size}>{size}</option>
-            ))}
-          </select>
-        </label>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <label className="block text-sm sm:col-span-2">
+            <span className="mb-1 block text-xs text-gray-500 dark:text-gray-400">{t('common.search')}</span>
+            <input
+              type="search"
+              className={`w-full ${controlClass}`}
+              placeholder={t('common.searchActivities')}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </label>
 
-        <div className="ms-auto flex flex-wrap gap-2">
-          <button type="button" className={exportButton} disabled={exporting !== null} onClick={() => onExport('filtered')}>
-            {exporting === 'filtered' ? t('common.exporting') : t('common.exportFiltered')}
-          </button>
-          <button type="button" className={exportButton} disabled={exporting !== null} onClick={() => onExport('all')}>
-            {exporting === 'all' ? t('common.exporting') : t('common.exportAll')}
-          </button>
+          <label className="block text-sm">
+            <span className="mb-1 block text-xs text-gray-500 dark:text-gray-400">{t('common.status')}</span>
+            <select
+              className={`w-full ${controlClass}`}
+              value={filters.status}
+              onChange={(e) => setFilter('status', e.target.value)}
+            >
+              <option value="">{t('common.allStatuses')}</option>
+              {STATUSES.map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+          </label>
+
+          <label className="block text-sm">
+            <span className="mb-1 block text-xs text-gray-500 dark:text-gray-400">{t('activities.type')}</span>
+            <select
+              className={`w-full ${controlClass}`}
+              value={filters.activity_type_id}
+              onChange={(e) => setFilter('activity_type_id', e.target.value)}
+            >
+              <option value="">{t('common.allTypes')}</option>
+              {types.map((ty) => (
+                <option key={ty.id} value={ty.id}>
+                  {i18n.language === 'lo' ? ty.name_lo : ty.name_en}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="block text-sm">
+            <span className="mb-1 block text-xs text-gray-500 dark:text-gray-400">{t('common.from')}</span>
+            <input
+              type="date"
+              className={`w-full ${controlClass}`}
+              value={filters.start_date}
+              max={filters.end_date || undefined}
+              onChange={(e) => setFilter('start_date', e.target.value)}
+            />
+          </label>
+
+          <label className="block text-sm">
+            <span className="mb-1 block text-xs text-gray-500 dark:text-gray-400">{t('common.to')}</span>
+            <input
+              type="date"
+              className={`w-full ${controlClass}`}
+              value={filters.end_date}
+              min={filters.start_date || undefined}
+              onChange={(e) => setFilter('end_date', e.target.value)}
+            />
+          </label>
+
+          {canFilterStaff && (
+            <label className="block text-sm">
+              <span className="mb-1 block text-xs text-gray-500 dark:text-gray-400">{t('common.staff')}</span>
+              <select
+                className={`w-full ${controlClass}`}
+                value={filters.user_id}
+                onChange={(e) => setFilter('user_id', e.target.value)}
+              >
+                <option value="">{t('common.allStaff')}</option>
+                {user && <option value={user.id}>{t('common.myRecords')}</option>}
+                {team.map((member) => (
+                  <option key={member.id} value={member.id}>
+                    {member.full_name} ({member.staff_code})
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+
+          {canFilterDivision && (
+            <label className="block text-sm">
+              <span className="mb-1 block text-xs text-gray-500 dark:text-gray-400">{t('common.division')}</span>
+              <select
+                className={`w-full ${controlClass}`}
+                value={filters.division_id}
+                onChange={(e) => setFilter('division_id', e.target.value)}
+              >
+                <option value="">{t('common.allDivisions')}</option>
+                {divisions.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {i18n.language === 'lo' ? d.name_lo : d.name_en}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
         </div>
       </div>
 
@@ -149,6 +297,9 @@ export function ActivityListPage() {
               <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400">{t('activities.startDate')}</th>
               <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400">{t('activities.type')}</th>
               <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400">{t('activities.titleLo')}</th>
+              {canFilterStaff && (
+                <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400">{t('common.staff')}</th>
+              )}
               <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400">{t('common.status')}</th>
               <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400">{t('activities.duration')}</th>
               <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-400">{t('common.actions')}</th>
@@ -156,9 +307,9 @@ export function ActivityListPage() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td className="px-4 py-6 text-gray-500 dark:text-gray-400" colSpan={6}>{t('common.loading')}</td></tr>
+              <tr><td className="px-4 py-6 text-gray-500 dark:text-gray-400" colSpan={7}>{t('common.loading')}</td></tr>
             ) : rows.length === 0 ? (
-              <tr><td className="px-4 py-6 text-gray-400" colSpan={6}>{t('common.noRecords')}</td></tr>
+              <tr><td className="px-4 py-6 text-gray-400" colSpan={7}>{t('common.noRecords')}</td></tr>
             ) : (
               rows.map((row) => (
                 <tr key={row.id} className="border-b border-gray-100 dark:border-gray-800">
@@ -167,6 +318,9 @@ export function ActivityListPage() {
                   <td className="px-4 py-3 text-gray-800 dark:text-white/90">
                     {i18n.language === 'en' && row.title_en ? row.title_en : row.title_lo}
                   </td>
+                  {canFilterStaff && (
+                    <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{row.owner_name}</td>
+                  )}
                   <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{row.status}</td>
                   <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{((row.duration_minutes || 0) / 60).toFixed(1)}h</td>
                   <td className="px-4 py-3">
@@ -178,7 +332,7 @@ export function ActivityListPage() {
                           row.status === 'draft'
                             ? () => {
                                 if (confirm(t('common.confirmDelete'))) {
-                                  apiService.deleteActivity(row.id).then(() => load(page));
+                                  apiService.deleteActivity(row.id).then(load);
                                 }
                               }
                             : undefined
@@ -187,7 +341,7 @@ export function ActivityListPage() {
                       <button
                         type="button"
                         className="text-xs text-brand-500 hover:underline dark:text-brand-400"
-                        onClick={() => apiService.duplicateActivity(row.id).then(() => load(page))}
+                        onClick={() => apiService.duplicateActivity(row.id).then(load)}
                       >
                         {t('common.duplicate')}
                       </button>
@@ -200,10 +354,28 @@ export function ActivityListPage() {
         </table>
       </div>
 
+      {/* Pager */}
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          {t('common.showingRange', { from, to, total })}
-        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+            {t('common.rowsPerPage')}
+            <select
+              className={controlClass}
+              value={limit}
+              onChange={(e) => {
+                setLimit(Number(e.target.value));
+                setPage(1);
+              }}
+            >
+              {PAGE_SIZES.map((size) => (
+                <option key={size} value={size}>{size}</option>
+              ))}
+            </select>
+          </label>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            {t('common.showingRange', { from, to, total })}
+          </p>
+        </div>
         <div className="flex items-center gap-2">
           <button
             type="button"

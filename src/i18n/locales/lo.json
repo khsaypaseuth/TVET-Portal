@@ -67,7 +67,15 @@
     "exportAll": "ສົ່ງອອກທັງໝົດ",
     "exporting": "ກຳລັງສົ່ງອອກ…",
     "exportFailed": "ສົ່ງອອກບໍ່ສຳເລັດ",
-    "noRecords": "ບໍ່ພົບຂໍ້ມູນ"
+    "noRecords": "ບໍ່ພົບຂໍ້ມູນ",
+    "reset": "ລ້າງການກັ່ນຕອງ",
+    "searchActivities": "ຄົ້ນຫາຫົວຂໍ້ ຫຼື ສະຖານທີ່",
+    "allTypes": "ທຸກປະເພດ",
+    "allStatuses": "ທຸກສະຖານະ",
+    "allStaff": "ພະນັກງານທັງໝົດ",
+    "allDivisions": "ທຸກພະແນກ",
+    "myRecords": "ຂໍ້ມູນຂອງຂ້ອຍ",
+    "filters": "ການກັ່ນຕອງ"
   },
   "auth": {
     "signInTitle": "ເຂົ້າສູ່ລະບົບ",
