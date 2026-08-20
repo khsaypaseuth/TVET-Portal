@@ -1,113 +1,56 @@
-# CMS Login System Setup Guide
+# TVED Activity & Task Tracking System — Setup Guide
+
+Admin portal for the Department of Technical and Vocational Education and Training (TVED).
+
+## Prerequisites
+- Node.js 20+
+- PostgreSQL 14+
+- Database `tvet_portal` (create if missing)
 
 ## Backend Setup
 
-1. **Navigate to server directory:**
-   ```bash
-   cd server
-   ```
+```bash
+cd server
+npm install
+cp .env.example .env   # edit credentials if needed
+npm run migrate
+npm run seed
+npm run dev
+```
 
-2. **Install dependencies (if not already done):**
-   ```bash
-   npm install
-   ```
+API runs on **http://localhost:5001**
 
-3. **Create `.env` file** in the `server` directory:
-   ```
-   DB_HOST=localhost
-   DB_PORT=5432
-   DB_NAME=cms_db
-   DB_USER=postgres
-   DB_PASSWORD=Tv3Vm1eA
-   JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
-   JWT_EXPIRE=7d
-   PORT=5000
-   NODE_ENV=development
-   ```
+### Default Super Admin
+- Username / staff code: `admin`
+- Password: `admin123`
+- Email: `admin@tved.local`
 
-4. **Ensure PostgreSQL is running** and database `cms_db` exists:
-   ```bash
-   # Connect to PostgreSQL and create database if needed
-   psql -U postgres
-   CREATE DATABASE cms_db;
-   \q
-   ```
-
-5. **Start the backend server:**
-   ```bash
-   npm run dev
-   ```
-
-   The server will:
-   - Automatically create the `users` table
-   - Seed a super admin user with credentials:
-     - **Username:** `admin`
-     - **Password:** `admin123`
-     - **Email:** `admin@cms.local`
-     - **Role:** `super_admin`
-
-   Server will run on `http://localhost:5000`
+### Environment (`server/.env`)
+```
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=tvet_portal
+DB_USER=postgres
+DB_PASSWORD=your-password
+JWT_SECRET=change-me-in-production
+JWT_EXPIRE=7d
+PORT=5001
+NODE_ENV=development
+```
 
 ## Frontend Setup
 
-1. **Ensure frontend dependencies are installed:**
-   ```bash
-   npm install
-   ```
-
-2. **Create `.env` file** in the root directory (optional, defaults to localhost:5000):
-   ```
-   VITE_API_URL=http://localhost:5000/api
-   ```
-
-3. **Start the frontend development server:**
-   ```bash
-   npm run dev
-   ```
-
-   Frontend will run on `http://localhost:5173`
-
-## Testing the Login
-
-1. Open `http://localhost:5173/signin`
-2. Use the super admin credentials:
-   - **Username:** `admin` (or email: `admin@cms.local`)
-   - **Password:** `admin123`
-3. Click "Sign In"
-4. You should be redirected to the dashboard
-
-## API Endpoints
-
-- `POST /api/auth/login` - Login endpoint
-- `GET /api/auth/me` - Get current user (requires authentication)
-- `GET /api/health` - Health check
-
-## Project Structure
-
-```
-CMS/
-├── server/                 # Backend server
-│   ├── src/
-│   │   ├── config/        # Database configuration
-│   │   ├── controllers/   # Route controllers
-│   │   ├── middleware/    # Auth middleware
-│   │   ├── models/        # Database models
-│   │   ├── routes/        # API routes
-│   │   └── utils/         # Utilities (seed script)
-│   └── package.json
-├── src/                    # Frontend React app
-│   ├── components/
-│   │   └── auth/          # Auth components
-│   ├── context/           # React contexts (Auth, Theme)
-│   ├── services/          # API service
-│   └── ...
-└── package.json
+```bash
+npm install
+# optional: echo 'VITE_API_URL=http://localhost:5001/api' > .env
+npm run dev
 ```
 
-## Troubleshooting
+Frontend: **http://localhost:5173** — sign in at `/signin`
 
-- **Database connection error:** Ensure PostgreSQL is running and credentials are correct
-- **Port already in use:** Change PORT in server/.env
-- **CORS errors:** Backend CORS is configured to allow all origins in development
-- **Token expired:** Default JWT expiry is 7 days, can be changed in .env
+## API
+- `GET /api/health`
+- `POST /api/auth/login`
+- `GET /api/auth/me` (Bearer token)
 
+Accounts are created by Super Admin only (no public registration).

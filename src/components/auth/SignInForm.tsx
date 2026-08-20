@@ -2,7 +2,7 @@ import { useState, FormEvent } from "react";
 import { Link } from "react-router";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../../context/AuthContext";
-import { ChevronLeftIcon, EyeCloseIcon, EyeIcon } from "../../icons";
+import { EyeCloseIcon, EyeIcon } from "../../icons";
 import Label from "../form/Label";
 import Input from "../form/input/InputField";
 import Checkbox from "../form/input/Checkbox";
@@ -33,15 +33,6 @@ export default function SignInForm() {
   };
   return (
     <div className="flex flex-col flex-1">
-      <div className="w-full max-w-md pt-10 mx-auto">
-        <Link
-          to="/"
-          className="inline-flex items-center text-sm text-gray-500 transition-colors hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
-        >
-          <ChevronLeftIcon className="size-5" />
-          {t("common.backToDashboard")}
-        </Link>
-      </div>
       <div className="flex flex-col justify-center flex-1 w-full max-w-md mx-auto">
         <div>
           <div className="mb-5 sm:mb-8">
@@ -68,7 +59,6 @@ export default function SignInForm() {
                     placeholder={t("auth.emailPlaceholder")}
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
-                    required
                     disabled={isLoading}
                   />
                 </div>
@@ -82,7 +72,6 @@ export default function SignInForm() {
                       placeholder={t("auth.passwordPlaceholder")}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      required
                       disabled={isLoading}
                     />
                     <span
@@ -113,9 +102,9 @@ export default function SignInForm() {
                 </div>
                 <div>
                   <Button 
+                    type="submit"
                     className="w-full" 
                     size="sm"
-                    type="submit"
                     disabled={isLoading}
                   >
                     {isLoading ? "Signing in..." : t("common.signIn")}

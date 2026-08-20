@@ -1,102 +1,107 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "react-router";
 import { useTranslation } from "react-i18next";
 
-// Assume these icons are imported from an icon library
 import {
-  BoxCubeIcon,
   CalenderIcon,
   ChevronDownIcon,
   GridIcon,
-  HorizontaLDots,
   ListIcon,
   PageIcon,
   PieChartIcon,
-  PlugInIcon,
   TableIcon,
   UserCircleIcon,
 } from "../icons";
 import { useSidebar } from "../context/SidebarContext";
 import SidebarWidget from "./SidebarWidget";
+import { useAuth } from "../context/AuthContext";
 
 type NavItem = {
   nameKey: string;
   icon: React.ReactNode;
   path?: string;
-  subItems?: { nameKey: string; path: string; pro?: boolean; new?: boolean }[];
+  permission?: string;
+  roles?: string[];
+  subItems?: { nameKey: string; path: string; permission?: string; roles?: string[]; pro?: boolean; new?: boolean }[];
 };
 
 const AppSidebar: React.FC = () => {
   const { t } = useTranslation();
+  const { user, hasPermission } = useAuth();
   const { isExpanded, isMobileOpen, isHovered, setIsHovered } = useSidebar();
   const location = useLocation();
+  const role = user?.role_code || user?.role || '';
 
-  const navItems: NavItem[] = [
+  const rawNavItems: NavItem[] = [
+    { icon: <GridIcon />, nameKey: "sidebar.dashboard", path: "/" },
+    { icon: <ListIcon />, nameKey: "sidebar.activities", path: "/activities" },
+    { icon: <CalenderIcon />, nameKey: "sidebar.calendar", path: "/calendar" },
     {
-      icon: <GridIcon />,
-      nameKey: "sidebar.dashboard",
-      subItems: [{ nameKey: "dashboard.ecommerce", path: "/", pro: false }],
-    },
-    {
-      icon: <CalenderIcon />,
-      nameKey: "sidebar.calendar",
-      path: "/calendar",
+      icon: <TableIcon />,
+      nameKey: "sidebar.approvals",
+      path: "/approvals",
+      permission: "activity.approve",
     },
     {
       icon: <UserCircleIcon />,
-      nameKey: "sidebar.userProfile",
-      path: "/profile",
+      nameKey: "sidebar.myTeam",
+      path: "/team",
+      permission: "activity.approve",
     },
+    { icon: <PieChartIcon />, nameKey: "sidebar.reports", path: "/reports" },
+    { icon: <UserCircleIcon />, nameKey: "sidebar.userProfile", path: "/profile" },
+  ];
+
+  const rawOthersItems: NavItem[] = [
     {
-      nameKey: "sidebar.forms",
-      icon: <ListIcon />,
-      subItems: [{ nameKey: "sidebar.formElements", path: "/form-elements", pro: false }],
-    },
-    {
-      nameKey: "sidebar.tables",
-      icon: <TableIcon />,
-      subItems: [{ nameKey: "sidebar.basicTables", path: "/basic-tables", pro: false }],
-    },
-    {
-      nameKey: "sidebar.pages",
+      nameKey: "sidebar.admin",
       icon: <PageIcon />,
+      roles: ["super_admin"],
       subItems: [
-        { nameKey: "sidebar.blankPage", path: "/blank", pro: false },
-        { nameKey: "sidebar.error404", path: "/error-404", pro: false },
+        { nameKey: "sidebar.users", path: "/admin/users" },
+        { nameKey: "sidebar.divisions", path: "/admin/divisions" },
+        { nameKey: "sidebar.positions", path: "/admin/positions" },
+        { nameKey: "sidebar.auditLog", path: "/admin/audit" },
+      ],
+    },
+    {
+      nameKey: "sidebar.cms",
+      icon: <PageIcon />,
+      permission: "cms.manage",
+      roles: ["super_admin", "admin_staff"],
+      subItems: [
+        { nameKey: "sidebar.news", path: "/cms/news" },
+        { nameKey: "sidebar.pages", path: "/cms/pages" },
+        { nameKey: "sidebar.institutions", path: "/cms/institutions" },
+        { nameKey: "sidebar.contacts", path: "/cms/contacts" },
       ],
     },
   ];
 
-  const othersItems: NavItem[] = [
-    {
-      icon: <PieChartIcon />,
-      nameKey: "sidebar.charts",
-      subItems: [
-        { nameKey: "sidebar.lineChart", path: "/line-chart", pro: false },
-        { nameKey: "sidebar.barChart", path: "/bar-chart", pro: false },
-      ],
-    },
-    {
-      icon: <BoxCubeIcon />,
-      nameKey: "sidebar.uiElements",
-      subItems: [
-        { nameKey: "sidebar.alerts", path: "/alerts", pro: false },
-        { nameKey: "sidebar.avatar", path: "/avatars", pro: false },
-        { nameKey: "sidebar.badge", path: "/badge", pro: false },
-        { nameKey: "sidebar.buttons", path: "/buttons", pro: false },
-        { nameKey: "sidebar.images", path: "/images", pro: false },
-        { nameKey: "sidebar.videos", path: "/videos", pro: false },
-      ],
-    },
-    {
-      icon: <PlugInIcon />,
-      nameKey: "sidebar.authentication",
-      subItems: [
-        { nameKey: "sidebar.signIn", path: "/signin", pro: false },
-        { nameKey: "sidebar.signUp", path: "/signup", pro: false },
-      ],
-    },
-  ];
+  const allow = (item: { permission?: string; roles?: string[] }) => {
+    if (item.roles?.length && !item.roles.includes(role) && role !== 'super_admin') {
+      if (!item.permission || !hasPermission(item.permission)) return false;
+    }
+    if (item.permission && !hasPermission(item.permission)) return false;
+    return true;
+  };
+
+  const navItems = useMemo(
+    () => rawNavItems.filter(allow),
+    [role, user?.permissions]
+  );
+
+  const othersItems = useMemo(
+    () =>
+      rawOthersItems
+        .filter(allow)
+        .map((item) => ({
+          ...item,
+          subItems: item.subItems?.filter(allow),
+        }))
+        .filter((item) => !item.subItems || item.subItems.length > 0),
+    [role, user?.permissions]
+  );
 
   const [openSubmenu, setOpenSubmenu] = useState<{
     type: "main" | "others";
@@ -335,39 +340,9 @@ const AppSidebar: React.FC = () => {
       </div>
       <div className="flex flex-col overflow-y-auto duration-300 ease-linear no-scrollbar">
         <nav className="mb-6">
-          <div className="flex flex-col gap-4">
-            <div>
-              <h2
-                className={`mb-4 text-xs uppercase flex leading-[20px] text-gray-400 ${
-                  !isExpanded && !isHovered
-                    ? "lg:justify-center"
-                    : "justify-start"
-                }`}
-              >
-                {isExpanded || isHovered || isMobileOpen ? (
-                  t("common.menu")
-                ) : (
-                  <HorizontaLDots className="size-6" />
-                )}
-              </h2>
-              {renderMenuItems(navItems, "main")}
-            </div>
-            <div className="">
-              <h2
-                className={`mb-4 text-xs uppercase flex leading-[20px] text-gray-400 ${
-                  !isExpanded && !isHovered
-                    ? "lg:justify-center"
-                    : "justify-start"
-                }`}
-              >
-                {isExpanded || isHovered || isMobileOpen ? (
-                  t("common.others")
-                ) : (
-                  <HorizontaLDots />
-                )}
-              </h2>
-              {renderMenuItems(othersItems, "others")}
-            </div>
+          <div className="flex flex-col gap-1">
+            {renderMenuItems(navItems, "main")}
+            {renderMenuItems(othersItems, "others")}
           </div>
         </nav>
         {isExpanded || isHovered || isMobileOpen ? <SidebarWidget /> : null}

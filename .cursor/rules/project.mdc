@@ -1,0 +1,22 @@
+---
+description: TVED React/Express project rules
+globs:
+alwaysApply: true
+---
+
+# TVED Activity & Task Tracking System
+
+Bilingual (Lao default + English) admin portal + public CMS for TVED, Lao PDR.
+Stack: React 19 + Vite + Tailwind (TailAdmin) / Express 5 + PostgreSQL (`tvet_portal`) / JWT.
+
+## Must follow
+- Visibility via `HierarchyService.visibleUserIds` + `ActivityPolicy` only — no inline role checks for data access.
+- Role data scopes: own | direct_reports | division | assigned_divisions | department.
+- Positions ≠ reporting line (`supervisor_id`).
+- Lao default locale; paired `*_lo`/`*_en` columns; English optional with Lao fallback.
+- PDF via Puppeteer only (Lao fonts). Fat services, thin controllers.
+- No public signup — Super Admin creates accounts.
+- Do not substitute Laravel or invent APIs. Extend existing Express/React patterns.
+- Migrations are append-only. Soft-deactivate users; never hard-delete with activities.
+
+See `CLAUDE.md` and `refdocs/TVED-Development-Plan.md` for full domain rules.

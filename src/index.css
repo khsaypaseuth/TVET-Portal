@@ -190,7 +190,7 @@ layer(base);
     cursor: pointer;
   }
   body {
-    @apply relative font-normal font-outfit z-1 bg-gray-50;
+    @apply relative font-normal font-outfit z-1 bg-gray-50 text-gray-800 dark:bg-gray-900 dark:text-white/90;
   }
   
   html.lang-lao body,
@@ -314,6 +314,14 @@ layer(base);
 
 .apexcharts-text {
   @apply fill-gray-700! dark:fill-gray-400!;
+}
+
+/* Pie/donut percentage labels over coloured slices */
+.apexcharts-pie-label,
+.apexcharts-datalabel-label,
+.apexcharts-datalabel-value {
+  fill: #ffffff !important;
+  color: #ffffff !important;
 }
 
 .apexcharts-tooltip.apexcharts-theme-light {

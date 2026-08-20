@@ -1,56 +1,80 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import authRoutes from './routes/authRoutes.js';
+import adminRoutes from './routes/adminRoutes.js';
+import activityRoutes from './routes/activityRoutes.js';
+import reportRoutes from './routes/reportRoutes.js';
+import notificationRoutes from './routes/notificationRoutes.js';
+import { publicRouter as publicCmsRoutes, adminRouter as adminCmsRoutes } from './routes/cmsRoutes.js';
 import seedDatabase from './utils/seed.js';
 
 dotenv.config();
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = process.env.PORT || 5001;
 
-// CORS Configuration - Allow all origins in development
 const corsOptions = {
-  origin: true, // Allow all origins in development
+  origin: true,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-  exposedHeaders: ['Authorization'],
+  exposedHeaders: ['Authorization', 'Content-Disposition'],
   optionsSuccessStatus: 200,
 };
 
-// Middleware - Apply CORS to all routes
+app.disable('x-powered-by');
 app.use(cors(corsOptions));
-
-app.use(express.json());
+app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Health check route
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'OK', message: 'Server is running' });
+// Security headers
+app.use((_req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  if (process.env.NODE_ENV === 'production') {
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  }
+  next();
 });
 
-// Routes
-app.use('/api/auth', authRoutes);
+app.get('/api/health', (_req, res) => {
+  res.json({
+    status: 'OK',
+    message: 'TVED Activity & Task Tracking System API is running',
+  });
+});
 
-// Error handling middleware
-app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+app.use('/api/auth', authRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/activities', activityRoutes);
+app.use('/api/reports', reportRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/public', publicCmsRoutes);
+app.use('/api/cms', adminCmsRoutes);
+
+// Serve uploaded files through authenticated-ish path (filename only; tighten later with signed URLs)
+app.use('/api/files', express.static(path.join(__dirname, '../uploads')));
+
+app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error('Error:', err);
-  res.status(500).json({
-    error: 'Internal server error',
+  res.status(err.status || 500).json({
+    error: err.message || 'Internal server error',
     message: process.env.NODE_ENV === 'development' ? err.message : undefined,
   });
 });
 
-// Start server
 const startServer = async () => {
   try {
-    // Seed database on startup
-    console.log('🌱 Seeding database...');
+    console.log('🌱 Running migrations + seed...');
     await seedDatabase();
 
     app.listen(PORT, () => {
-      console.log(`🚀 Server running on http://localhost:${PORT}`);
+      console.log(`🚀 TVED API running on http://localhost:${PORT}`);
       console.log(`📡 API endpoints available at http://localhost:${PORT}/api`);
     });
   } catch (error) {
@@ -60,4 +84,3 @@ const startServer = async () => {
 };
 
 startServer();
-

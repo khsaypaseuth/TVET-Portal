@@ -1,22 +1,15 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { apiService, LoginResponse } from '../services/api';
+import { apiService, User, LoginResponse } from '../services/api';
 import { useNavigate } from 'react-router';
 import { storage } from '../utils/storage';
-
-interface User {
-  id: number;
-  username: string;
-  email: string;
-  role: string;
-  full_name: string | null;
-  is_active: boolean;
-}
 
 interface AuthContextType {
   user: User | null;
   token: string | null;
   login: (username: string, password: string) => Promise<void>;
   logout: () => void;
+  refreshUser: () => Promise<void>;
+  hasPermission: (code: string) => boolean;
   isAuthenticated: boolean;
   isLoading: boolean;
 }
@@ -29,54 +22,59 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [isLoading, setIsLoading] = useState(true);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    // Check for stored auth data on mount
+  const refreshUser = async () => {
+    const storedToken = storage.getItem('auth_token');
+    if (!storedToken) {
+      setUser(null);
+      setToken(null);
+      return;
+    }
     try {
-      const storedToken = storage.getItem('auth_token');
-      const storedUser = storage.getItem('user');
-
-      if (storedToken && storedUser) {
-        setToken(storedToken);
-        setUser(JSON.parse(storedUser));
-      }
-    } catch (error) {
-      console.error('Error reading from localStorage:', error);
-      // Clear corrupted data
+      const res = await apiService.getCurrentUser();
+      setUser(res.data);
+      setToken(storedToken);
+      storage.setItem('user', JSON.stringify(res.data));
+    } catch {
       storage.removeItem('auth_token');
       storage.removeItem('user');
-    } finally {
-      setIsLoading(false);
+      setUser(null);
+      setToken(null);
     }
+  };
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const storedToken = storage.getItem('auth_token');
+        if (storedToken) {
+          setToken(storedToken);
+          await refreshUser();
+        }
+      } catch (error) {
+        console.error('Error hydrating auth:', error);
+        storage.removeItem('auth_token');
+        storage.removeItem('user');
+      } finally {
+        setIsLoading(false);
+      }
+    })();
   }, []);
 
   const login = async (username: string, password: string) => {
-    try {
-      const response: LoginResponse = await apiService.login(username, password);
-      
-      if (response.success && response.data) {
-        const { user: userData, token: authToken } = response.data;
-        
-        setUser(userData);
-        setToken(authToken);
-        
-        // Clear old auth data first to free up space
-        storage.removeItem('auth_token');
-        storage.removeItem('user');
-        
-        // Store new auth data with error handling
-        const tokenStored = storage.setItem('auth_token', authToken);
-        const userStored = storage.setItem('user', JSON.stringify(userData));
-        
-        if (!tokenStored || !userStored) {
-          console.warn('Warning: Could not store auth data in localStorage. Session will not persist.');
-          // User is still logged in, just won't persist across page reloads
-        }
-        
-        // Redirect to dashboard
+    const response: LoginResponse = await apiService.login(username, password);
+    if (response.success && response.data) {
+      const { token: authToken } = response.data;
+      setToken(authToken);
+      storage.setItem('auth_token', authToken);
+      // hydrate full profile + permissions
+      const me = await apiService.getCurrentUser();
+      setUser(me.data);
+      storage.setItem('user', JSON.stringify(me.data));
+      if (me.data.must_change_password) {
+        navigate('/change-password');
+      } else {
         navigate('/');
       }
-    } catch (error: any) {
-      throw new Error(error.message || 'Login failed');
     }
   };
 
@@ -87,6 +85,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     navigate('/signin');
   };
 
+  const hasPermission = (code: string) => {
+    if (!user) return false;
+    if (user.role === 'super_admin' || user.role_code === 'super_admin') return true;
+    return !!user.permissions?.includes(code);
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -94,6 +98,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         token,
         login,
         logout,
+        refreshUser,
+        hasPermission,
         isAuthenticated: !!user && !!token,
         isLoading,
       }}
@@ -110,4 +116,3 @@ export const useAuth = () => {
   }
   return context;
 };
-

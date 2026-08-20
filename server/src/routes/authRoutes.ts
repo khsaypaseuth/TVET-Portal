@@ -1,14 +1,21 @@
-import express from 'express';
-import { login, getCurrentUser } from '../controllers/authController.js';
-import { authenticateToken, AuthRequest } from '../middleware/auth.js';
+import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
+import { login, getCurrentUser, changePassword, updateProfile } from '../controllers/authController.js';
+import { authenticateToken } from '../middleware/auth.js';
 
-const router = express.Router();
+const router = Router();
 
-// Login route
-router.post('/login', login);
+const loginLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many login attempts, try again in a minute' },
+});
 
-// Get current user (protected route)
+router.post('/login', loginLimiter, login);
 router.get('/me', authenticateToken, getCurrentUser);
+router.put('/profile', authenticateToken, updateProfile);
+router.post('/change-password', authenticateToken, changePassword);
 
 export default router;
-
