@@ -257,15 +257,18 @@ class ApiService {
   }
   getApprovals(params: Record<string, string | number | undefined> = {}) {
     const qs = toQuery(params);
-    return this.request<{ success: boolean; data: any[] }>(
+    return this.request<{ success: boolean; data: any[]; meta?: ActivityListMeta }>(
       `/activities/approvals${qs ? `?${qs}` : ''}`
     );
   }
   getMyTeam(params: Record<string, string | number | undefined> = {}) {
     const qs = toQuery(params);
-    return this.request<{ success: boolean; data: any[]; period?: { start: string; end: string } }>(
-      `/activities/team${qs ? `?${qs}` : ''}`
-    );
+    return this.request<{
+      success: boolean;
+      data: any[];
+      period?: { start: string; end: string };
+      meta?: ActivityListMeta;
+    }>(`/activities/team${qs ? `?${qs}` : ''}`);
   }
 
   // Reports
@@ -278,7 +281,9 @@ class ApiService {
   }
   getReport(type: string, params: Record<string, string> = {}) {
     const q = new URLSearchParams(params);
-    return this.request<{ success: boolean; data: any }>(`/reports/${type}?${q}`);
+    return this.request<{ success: boolean; data: any; meta?: ActivityListMeta }>(
+      `/reports/${type}?${q}`
+    );
   }
   reportExcelUrl(type: string, params: Record<string, string> = {}) {
     const q = new URLSearchParams(params);

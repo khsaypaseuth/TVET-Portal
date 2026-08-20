@@ -31,6 +31,26 @@ export const listActivityTypes = async (_req: AuthRequest, res: Response) => {
 
 const PAGE_SIZES = [20, 50, 100];
 
+/** Resolves ?limit and ?page into a limit/offset pair, defaulting to 20 per page. */
+function parsePaging(query: AuthRequest['query']) {
+  const requested = Number(query.limit);
+  const limit = PAGE_SIZES.includes(requested) ? requested : PAGE_SIZES[0];
+  const page = Math.max(Number(query.page) || 1, 1);
+  return { limit, page, offset: (page - 1) * limit };
+}
+
+/** Builds the meta block every paginated list returns. */
+function pageMeta(total: number, page: number, limit: number) {
+  return {
+    total,
+    page,
+    limit,
+    pages: Math.max(Math.ceil(total / limit), 1),
+    has_prev: page > 1,
+    has_next: page * limit < total,
+  };
+}
+
 /** Filters shared by the list endpoint and the Excel exporter. */
 function parseActivityFilters(query: AuthRequest['query']) {
   return {
@@ -75,14 +95,12 @@ export const listActivities = async (req: AuthRequest, res: Response) => {
     // `all=1` skips paging for consumers that need a whole date range at once
     // (the calendar); it is still capped by EXPORT_MAX_ROWS in the service.
     const unpaged = req.query.all === '1' || req.query.all === 'true';
-    const requested = Number(req.query.limit);
-    const limit = PAGE_SIZES.includes(requested) ? requested : 20;
-    const page = Math.max(Number(req.query.page) || 1, 1);
+    const { limit, page, offset } = parsePaging(req.query);
 
     const { rows, total } = await ActivityService.list(user, {
       ...parseActivityFilters(req.query),
       limit: unpaged ? 0 : limit,
-      offset: unpaged ? 0 : (page - 1) * limit,
+      offset: unpaged ? 0 : offset,
     });
 
     return res.json({
@@ -90,14 +108,7 @@ export const listActivities = async (req: AuthRequest, res: Response) => {
       data: rows,
       meta: unpaged
         ? { total, page: 1, limit: rows.length, pages: 1, has_prev: false, has_next: false }
-        : {
-            total,
-            page,
-            limit,
-            pages: Math.max(Math.ceil(total / limit), 1),
-            has_prev: page > 1,
-            has_next: page * limit < total,
-          },
+        : pageMeta(total, page, limit),
     });
   } catch (e) {
     return handleErr(res, e);
@@ -150,7 +161,7 @@ export const exportApprovalsExcel = async (req: AuthRequest, res: Response) => {
 
     const exportAll = req.query.all === '1' || req.query.all === 'true';
     const filters = exportAll ? noActivityFilters() : parseActivityFilters(req.query);
-    const rows = await ActivityService.approvalsQueue(user, filters);
+    const { rows } = await ActivityService.approvalsQueue(user, { ...filters, limit: 0 });
     const lao = (req.query.lang || 'lo') === 'lo';
 
     const workbook = ExcelService.activitiesWorkbook(rows, {
@@ -176,7 +187,7 @@ export const exportTeamExcel = async (req: AuthRequest, res: Response) => {
     if (!user) return res.status(401).json({ error: 'Unauthorized' });
 
     const filters = parseTeamFilters(req.query);
-    const { rows, period } = await ActivityService.teamSummary(user, filters);
+    const { rows, period } = await ActivityService.teamSummary(user, { ...filters, limit: 0 });
     const lao = (req.query.lang || 'lo') === 'lo';
 
     const workbook = ExcelService.staffWorkbook(rows, {
@@ -377,8 +388,13 @@ export const approvalsQueue = async (req: AuthRequest, res: Response) => {
   try {
     const user = await me(req);
     if (!user) return res.status(401).json({ error: 'Unauthorized' });
-    const data = await ActivityService.approvalsQueue(user, parseActivityFilters(req.query));
-    return res.json({ success: true, data });
+    const { limit, page, offset } = parsePaging(req.query);
+    const { rows, total } = await ActivityService.approvalsQueue(user, {
+      ...parseActivityFilters(req.query),
+      limit,
+      offset,
+    });
+    return res.json({ success: true, data: rows, meta: pageMeta(total, page, limit) });
   } catch (e) {
     return handleErr(res, e);
   }
@@ -388,8 +404,13 @@ export const myTeam = async (req: AuthRequest, res: Response) => {
   try {
     const user = await me(req);
     if (!user) return res.status(401).json({ error: 'Unauthorized' });
-    const { rows, period } = await ActivityService.teamSummary(user, parseTeamFilters(req.query));
-    return res.json({ success: true, data: rows, period });
+    const { limit, page, offset } = parsePaging(req.query);
+    const { rows, total, period } = await ActivityService.teamSummary(user, {
+      ...parseTeamFilters(req.query),
+      limit,
+      offset,
+    });
+    return res.json({ success: true, data: rows, period, meta: pageMeta(total, page, limit) });
   } catch (e) {
     return handleErr(res, e);
   }

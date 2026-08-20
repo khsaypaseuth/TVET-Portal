@@ -12,6 +12,36 @@ export interface ReportFilter {
   statuses?: string[];
   /** Free-text search; what it matches depends on the report's row shape. */
   q?: string;
+  /** Page size; 0 (or omitted) means every row, which is what the exports use. */
+  limit?: number;
+  offset?: number;
+}
+
+/** Upper bound on rows a single report may return. */
+export const REPORT_MAX_ROWS = 5000;
+
+/**
+ * Appends LIMIT/OFFSET params and returns the SQL fragment. A limit of 0 means
+ * "no paging", capped at REPORT_MAX_ROWS so one request can't pull everything.
+ */
+function pagingClause(filter: ReportFilter, params: unknown[]) {
+  const limit = Math.min(Math.max(filter.limit ?? 0, 0) || REPORT_MAX_ROWS, REPORT_MAX_ROWS);
+  const offset = Math.max(filter.offset ?? 0, 0);
+  params.push(limit, offset);
+  return { sql: `LIMIT $${params.length - 1} OFFSET $${params.length}`, limit, offset };
+}
+
+/**
+ * Every paginated report carries COUNT(*) OVER() on each row — window functions
+ * run before LIMIT, so it counts the whole filtered set. Lift it off the rows.
+ */
+function splitTotal(rows: any[]) {
+  const total: number = rows[0]?.total_count ?? 0;
+  return {
+    rows: rows.map(({ total_count, grand_total_minutes, ...rest }: any) => rest),
+    total,
+    grandTotalMinutes: (rows[0]?.grand_total_minutes ?? 0) as number,
+  };
 }
 
 /**
@@ -67,11 +97,15 @@ export const ReportService = {
       'a.title_lo', 'a.title_en', 'a.location', 'u.full_name', 'u.staff_code',
     ]);
 
+    const paging = pagingClause(filter, params);
+
     const result = await pool.query(
       `SELECT a.id, a.start_date, a.end_date, a.start_time, a.end_time, a.is_all_day,
               a.title_lo, a.title_en, a.description, a.duration_minutes, a.status, a.location,
               at.name_lo AS type_name_lo, at.name_en AS type_name_en,
-              u.full_name, u.staff_code
+              u.full_name, u.staff_code,
+              COUNT(*) OVER()::int AS total_count,
+              SUM(a.duration_minutes) OVER()::int AS grand_total_minutes
        FROM activities a
        JOIN activity_types at ON at.id = a.activity_type_id
        JOIN users u ON u.id = a.user_id
@@ -79,14 +113,19 @@ export const ReportService = {
          AND a.user_id = ANY($1::int[])
          AND a.start_date <= $3 AND a.end_date >= $2
          ${statusSql} ${typeSql} ${searchSql}
-       ORDER BY a.start_date, a.start_time NULLS LAST`,
+       ORDER BY a.start_date, a.start_time NULLS LAST, a.id
+       ${paging.sql}`,
       params
     );
-    const totalMinutes = result.rows.reduce(
-      (sum: number, r: { duration_minutes: number }) => sum + (r.duration_minutes || 0),
-      0
-    );
-    return { rows: result.rows, total_minutes: totalMinutes, total_hours: +(totalMinutes / 60).toFixed(2) };
+
+    // Hours cover the whole filtered report, not just the page being shown.
+    const { rows, total, grandTotalMinutes } = splitTotal(result.rows);
+    return {
+      rows,
+      total,
+      total_minutes: grandTotalMinutes,
+      total_hours: +(grandTotalMinutes / 60).toFixed(2),
+    };
   },
 
   async divisionSummary(me: HierarchyUser, filter: ReportFilter) {
@@ -98,8 +137,11 @@ export const ReportService = {
       'u.full_name', 'u.staff_code', 'd.name_lo', 'd.name_en',
     ]);
 
+    const paging = pagingClause(filter, params);
+
     const result = await pool.query(
       `SELECT u.id AS user_id, u.full_name, u.staff_code, d.name_lo AS division_name_lo, d.name_en AS division_name_en,
+              COUNT(*) OVER()::int AS total_count,
               COUNT(a.id)::int AS activity_count,
               COALESCE(SUM(a.duration_minutes),0)::int AS total_minutes,
               COUNT(*) FILTER (WHERE a.status = 'approved')::int AS approved_count
@@ -109,10 +151,12 @@ export const ReportService = {
          AND a.start_date <= $3 AND a.end_date >= $2 ${statusSql.replace(/a\.status/g, 'a.status')}
        WHERE u.id = ANY($1::int[]) AND u.deleted_at IS NULL ${searchSql}
        GROUP BY u.id, u.full_name, u.staff_code, d.name_lo, d.name_en
-       ORDER BY u.full_name`,
+       ORDER BY u.full_name, u.id
+       ${paging.sql}`,
       params
     );
-    return { rows: result.rows };
+    const { rows, total } = splitTotal(result.rows);
+    return { rows, total };
   },
 
   async departmentSummary(me: HierarchyUser, filter: ReportFilter) {
@@ -122,8 +166,11 @@ export const ReportService = {
 
     const searchSql = searchClause(filter, params, ['d.name_lo', 'd.name_en', 'd.code']);
 
+    const paging = pagingClause(filter, params);
+
     const result = await pool.query(
       `SELECT d.id AS division_id, d.name_lo, d.name_en, d.code,
+              COUNT(*) OVER()::int AS total_count,
               COUNT(a.id)::int AS activity_count,
               COALESCE(SUM(a.duration_minutes),0)::int AS total_minutes,
               COUNT(DISTINCT a.user_id)::int AS staff_count
@@ -133,10 +180,12 @@ export const ReportService = {
          AND a.start_date <= $3 AND a.end_date >= $2 ${statusSql}
        WHERE d.is_active = true ${searchSql}
        GROUP BY d.id, d.name_lo, d.name_en, d.code
-       ORDER BY d.sort_order, d.name_en`,
+       ORDER BY d.sort_order, d.name_en, d.id
+       ${paging.sql}`,
       params
     );
-    return { rows: result.rows };
+    const { rows, total } = splitTotal(result.rows);
+    return { rows, total };
   },
 
   async meetingsRegister(me: HierarchyUser, filter: ReportFilter) {
@@ -145,8 +194,9 @@ export const ReportService = {
     const searchSql = searchClause(filter, params, [
       'a.title_lo', 'a.title_en', 'a.location', 'u.full_name',
     ]);
+    const paging = pagingClause(filter, params);
     const result = await pool.query(
-      `SELECT a.*, at.code AS type_code, at.name_lo AS type_name_lo, at.name_en AS type_name_en,
+      `SELECT a.*, COUNT(*) OVER()::int AS total_count, at.code AS type_code, at.name_lo AS type_name_lo, at.name_en AS type_name_en,
               u.full_name AS owner_name,
               COALESCE(json_agg(json_build_object(
                 'user_id', p.user_id, 'external_name', p.external_name, 'role_in_activity', p.role_in_activity
@@ -161,18 +211,22 @@ export const ReportService = {
          AND at.code IN ('MEETING', 'CONFERENCE')
          AND a.status IN ('approved', 'submitted') ${searchSql}
        GROUP BY a.id, at.code, at.name_lo, at.name_en, u.full_name
-       ORDER BY a.start_date`,
+       ORDER BY a.start_date, a.id
+       ${paging.sql}`,
       params
     );
-    return { rows: result.rows };
+    const { rows, total } = splitTotal(result.rows);
+    return { rows, total };
   },
 
   async compliance(me: HierarchyUser, filter: ReportFilter) {
     const userIds = await resolveUserIds(me, { ...filter, scope: filter.scope || 'division' });
     const params: unknown[] = [userIds, filter.start_date, filter.end_date];
     const searchSql = searchClause(filter, params, ['u.full_name', 'u.staff_code', 'd.name_en']);
+    const paging = pagingClause(filter, params);
     const result = await pool.query(
       `SELECT u.id, u.full_name, u.staff_code, d.name_en AS division_name,
+              COUNT(*) OVER()::int AS total_count,
               COUNT(a.id)::int AS submitted_count,
               COALESCE(SUM(a.duration_minutes),0)::int AS total_minutes,
               CASE WHEN COUNT(a.id) = 0 THEN false ELSE true END AS has_submitted
@@ -183,10 +237,12 @@ export const ReportService = {
          AND a.status IN ('submitted', 'approved')
        WHERE u.id = ANY($1::int[]) AND u.is_active = true AND u.deleted_at IS NULL ${searchSql}
        GROUP BY u.id, u.full_name, u.staff_code, d.name_en
-       ORDER BY has_submitted ASC, u.full_name`,
+       ORDER BY has_submitted ASC, u.full_name, u.id
+       ${paging.sql}`,
       params
     );
-    return { rows: result.rows };
+    const { rows, total } = splitTotal(result.rows);
+    return { rows, total };
   },
 
   async dashboardStats(

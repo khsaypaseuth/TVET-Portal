@@ -5,6 +5,8 @@ import PageMeta from '../../components/common/PageMeta';
 import PeriodFilter from '../../components/common/PeriodFilter';
 import ActionIcons from '../../components/common/ActionIcons';
 import FilterPanel, { Field, controlClass } from '../../components/common/FilterPanel';
+import Pager from '../../components/common/Pager';
+import type { ActivityListMeta } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { apiService } from '../../services/api';
 import { PeriodPreset, formatHours, resolvePeriod } from '../../utils/period';
@@ -18,6 +20,9 @@ export default function ReportsPage() {
   const [start, setStart] = useState(initial.start);
   const [end, setEnd] = useState(initial.end);
   const [data, setData] = useState<any>(null);
+  const [meta, setMeta] = useState<ActivityListMeta | null>(null);
+  const [limit, setLimit] = useState(20);
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
   const { user } = useAuth();
   const [search, setSearch] = useState('');
@@ -52,10 +57,18 @@ export default function ReportsPage() {
     [start, end, type, activeExtra]
   );
 
-  const run = (override?: { start?: string; end?: string; reportType?: string }) => {
+  const run = (override?: {
+    start?: string;
+    end?: string;
+    reportType?: string;
+    page?: number;
+    limit?: number;
+  }) => {
     const s = override?.start ?? start;
     const e = override?.end ?? end;
     const reportType = override?.reportType ?? type;
+    const activePage = override?.page ?? page;
+    const activeLimit = override?.limit ?? limit;
     const query = {
       start_date: s,
       end_date: e,
@@ -66,11 +79,16 @@ export default function ReportsPage() {
             ? 'department'
             : 'division',
       ...activeExtra,
+      limit: String(activeLimit),
+      page: String(activePage),
     };
     setLoading(true);
     apiService
       .getReport(reportType, query)
-      .then((r) => setData(r.data))
+      .then((r) => {
+        setData(r.data);
+        setMeta(r.meta ?? null);
+      })
       .catch((err) => alert(err.message))
       .finally(() => setLoading(false));
   };
@@ -103,7 +121,8 @@ export default function ReportsPage() {
       firstRun.current = false;
       return;
     }
-    run();
+    setPage(1);
+    run({ page: 1 });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeExtra]);
 
@@ -113,18 +132,21 @@ export default function ReportsPage() {
       const r = resolvePeriod(p);
       setStart(r.start);
       setEnd(r.end);
-      run({ start: r.start, end: r.end });
+      setPage(1);
+      run({ start: r.start, end: r.end, page: 1 });
     }
   };
 
   const onTypeChange = (next: string) => {
     setType(next);
-    run({ reportType: next });
+    setPage(1);
+    run({ reportType: next, page: 1 });
   };
 
   const download = async (format: 'excel' | 'pdf') => {
     try {
       const reportType = type === 'meetings' && format === 'pdf' ? 'individual' : type;
+      // params carries no paging — an export always covers the whole report.
       const blob = await apiService.downloadReport(reportType, format, params);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -270,10 +292,6 @@ export default function ReportsPage() {
         )}
       </FilterPanel>
 
-      <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">
-        {t('common.results', { count: (data?.rows || []).length })}
-      </p>
-
       {data?.total_hours !== undefined && (
         <p className="mb-3 text-sm text-gray-600 dark:text-gray-400">
           {t('common.hours')}: <strong>{data.total_hours}</strong>
@@ -336,6 +354,23 @@ export default function ReportsPage() {
           </table>
         )}
       </div>
+
+      <Pager
+        page={page}
+        limit={limit}
+        meta={meta}
+        rowCount={rows.length}
+        loading={loading}
+        onPageChange={(next) => {
+          setPage(next);
+          run({ page: next });
+        }}
+        onLimitChange={(next) => {
+          setLimit(next);
+          setPage(1);
+          run({ page: 1, limit: next });
+        }}
+      />
     </>
   );
 }

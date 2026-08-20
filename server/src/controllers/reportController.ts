@@ -27,7 +27,18 @@ function parseFilter(query: AuthRequest['query']): ReportFilter {
       : undefined,
     statuses: query.statuses ? String(query.statuses).split(',') : undefined,
     q: (query.q as string | undefined) || undefined,
+    ...parseReportPaging(query),
   };
+}
+
+const PAGE_SIZES = [20, 50, 100];
+
+/** Resolves ?limit and ?page for the report tables. */
+function parseReportPaging(query: AuthRequest['query']) {
+  const requested = Number(query.limit);
+  const limit = PAGE_SIZES.includes(requested) ? requested : PAGE_SIZES[0];
+  const page = Math.max(Number(query.page) || 1, 1);
+  return { limit, offset: (page - 1) * limit };
 }
 
 async function me(req: AuthRequest) {
@@ -76,7 +87,23 @@ export const runReport = async (req: AuthRequest, res: Response) => {
       default:
         return res.status(400).json({ error: 'Unknown report type' });
     }
-    return res.json({ success: true, data, filter });
+    const limit = filter.limit || PAGE_SIZES[0];
+    const page = Math.floor((filter.offset || 0) / limit) + 1;
+    const total = (data as { total?: number }).total ?? (data.rows?.length ?? 0);
+
+    return res.json({
+      success: true,
+      data,
+      filter,
+      meta: {
+        total,
+        page,
+        limit,
+        pages: Math.max(Math.ceil(total / limit), 1),
+        has_prev: page > 1,
+        has_next: page * limit < total,
+      },
+    });
   } catch (e) {
     console.error(e);
     return res.status(500).json({ error: 'Internal server error' });
@@ -88,7 +115,8 @@ export const exportExcel = async (req: AuthRequest, res: Response) => {
     const user = await me(req);
     if (!user) return res.status(401).json({ error: 'Unauthorized' });
     const type = req.params.type;
-    const filter = parseFilter(req.query);
+    // Exports cover the whole filtered report, never just the page on screen.
+    const filter = { ...parseFilter(req.query), limit: 0, offset: 0 };
     const report =
       type === 'division'
         ? await ReportService.divisionSummary(user, filter)
@@ -139,7 +167,7 @@ export const exportPdf = async (req: AuthRequest, res: Response) => {
   try {
     const user = await me(req);
     if (!user) return res.status(401).json({ error: 'Unauthorized' });
-    const filter = parseFilter(req.query);
+    const filter = { ...parseFilter(req.query), limit: 0, offset: 0 };
     const report = await ReportService.individual(user, filter);
 
     const fontCandidates = [

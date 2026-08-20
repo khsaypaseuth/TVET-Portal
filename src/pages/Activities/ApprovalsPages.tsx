@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next';
 import PageMeta from '../../components/common/PageMeta';
 import ActionIcons from '../../components/common/ActionIcons';
 import FilterPanel, { Field, controlClass, outlineButtonClass } from '../../components/common/FilterPanel';
+import Pager from '../../components/common/Pager';
+import type { ActivityListMeta } from '../../services/api';
 import { apiService } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { CheckCircleIcon, CloseLineIcon, DownloadIcon } from '../../icons';
@@ -47,6 +49,9 @@ export function ApprovalsPage() {
   const { t, i18n } = useTranslation();
   const { user } = useAuth();
   const [rows, setRows] = useState<any[]>([]);
+  const [meta, setMeta] = useState<ActivityListMeta | null>(null);
+  const [limit, setLimit] = useState(20);
+  const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<number[]>([]);
   const [filters, setFilters] = useState({ ...EMPTY_APPROVAL_FILTERS });
   const [search, setSearch] = useState('');
@@ -67,8 +72,11 @@ export function ApprovalsPage() {
   const load = () => {
     setLoading(true);
     apiService
-      .getApprovals(queryParams)
-      .then((r) => setRows(r.data))
+      .getApprovals({ ...queryParams, limit, page })
+      .then((r) => {
+        setRows(r.data);
+        setMeta(r.meta ?? null);
+      })
       .catch(console.error)
       .finally(() => setLoading(false));
   };
@@ -87,10 +95,13 @@ export function ApprovalsPage() {
     load();
     // Selections refer to rows that may no longer be listed.
     setSelected([]);
-  }, [JSON.stringify(filters)]);
+  }, [JSON.stringify(filters), limit, page]);
 
-  const setFilter = (key: keyof typeof EMPTY_APPROVAL_FILTERS, value: string) =>
+  // A filter change invalidates the current page number.
+  const setFilter = (key: keyof typeof EMPTY_APPROVAL_FILTERS, value: string) => {
     setFilters((f) => ({ ...f, [key]: value }));
+    setPage(1);
+  };
 
   const activeCount = Object.values(filters).filter((v) => v !== '').length;
 
@@ -128,6 +139,7 @@ export function ApprovalsPage() {
         onReset={() => {
           setSearch('');
           setFilters({ ...EMPTY_APPROVAL_FILTERS });
+          setPage(1);
         }}
         actions={
           <button type="button" className={outlineButtonClass} disabled={exporting} onClick={onExport}>
@@ -205,10 +217,6 @@ export function ApprovalsPage() {
         )}
       </FilterPanel>
 
-      <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">
-        {t('common.results', { count: rows.length })}
-      </p>
-
       <div className={tableWrap}>
         <table className="min-w-full text-sm">
           <thead className="bg-gray-50 dark:bg-white/[0.02]">
@@ -282,6 +290,19 @@ export function ApprovalsPage() {
           </tbody>
         </table>
       </div>
+
+      <Pager
+        page={page}
+        limit={limit}
+        meta={meta}
+        rowCount={rows.length}
+        loading={loading}
+        onPageChange={setPage}
+        onLimitChange={(next) => {
+          setLimit(next);
+          setPage(1);
+        }}
+      />
     </>
   );
 }
@@ -298,6 +319,9 @@ export function MyTeamPage() {
   const { t, i18n } = useTranslation();
   const { user } = useAuth();
   const [rows, setRows] = useState<any[]>([]);
+  const [meta, setMeta] = useState<ActivityListMeta | null>(null);
+  const [limit, setLimit] = useState(20);
+  const [page, setPage] = useState(1);
   const [period, setPeriod] = useState<{ start: string; end: string } | null>(null);
   const [filters, setFilters] = useState({ ...EMPTY_TEAM_FILTERS });
   const [search, setSearch] = useState('');
@@ -324,17 +348,20 @@ export function MyTeamPage() {
   useEffect(() => {
     setLoading(true);
     apiService
-      .getMyTeam(queryParams)
+      .getMyTeam({ ...queryParams, limit, page })
       .then((r) => {
         setRows(r.data);
         setPeriod(r.period ?? null);
+        setMeta(r.meta ?? null);
       })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [JSON.stringify(filters)]);
+  }, [JSON.stringify(filters), limit, page]);
 
-  const setFilter = (key: keyof typeof EMPTY_TEAM_FILTERS, value: string) =>
+  const setFilter = (key: keyof typeof EMPTY_TEAM_FILTERS, value: string) => {
     setFilters((f) => ({ ...f, [key]: value }));
+    setPage(1);
+  };
 
   const activeCount = Object.values(filters).filter((v) => v !== '').length;
 
@@ -360,6 +387,7 @@ export function MyTeamPage() {
         onReset={() => {
           setSearch('');
           setFilters({ ...EMPTY_TEAM_FILTERS });
+          setPage(1);
         }}
         actions={
           <button type="button" className={outlineButtonClass} disabled={exporting} onClick={onExport}>
@@ -421,10 +449,11 @@ export function MyTeamPage() {
         </Field>
       </FilterPanel>
 
-      <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">
-        {t('common.results', { count: rows.length })}
-        {period && <span className="ms-3 text-gray-400">({period.start} → {period.end})</span>}
-      </p>
+      {period && (
+        <p className="mb-3 text-sm text-gray-400">
+          {period.start} → {period.end}
+        </p>
+      )}
 
       <div className={tableWrap}>
         <table className="min-w-full text-sm">
@@ -475,6 +504,19 @@ export function MyTeamPage() {
           </tbody>
         </table>
       </div>
+
+      <Pager
+        page={page}
+        limit={limit}
+        meta={meta}
+        rowCount={rows.length}
+        loading={loading}
+        onPageChange={setPage}
+        onLimitChange={(next) => {
+          setLimit(next);
+          setPage(1);
+        }}
+      />
     </>
   );
 }

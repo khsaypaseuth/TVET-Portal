@@ -3,6 +3,8 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import PageMeta from '../../components/common/PageMeta';
 import ActionIcons from '../../components/common/ActionIcons';
+import { controlClass, outlineButtonClass } from '../../components/common/FilterPanel';
+import Pager, { PAGE_SIZES } from '../../components/common/Pager';
 import { apiService } from '../../services/api';
 import type { ActivityListMeta } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
@@ -28,7 +30,6 @@ function computeLiveDuration(form: {
   return days * 8 * 60;
 }
 
-const PAGE_SIZES = [20, 50, 100];
 const STATUSES = ['draft', 'submitted', 'approved', 'rejected', 'cancelled'];
 
 const EMPTY_FILTERS = {
@@ -40,9 +41,6 @@ const EMPTY_FILTERS = {
   user_id: '',
   division_id: '',
 };
-
-const controlClass =
-  'rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90';
 
 export function ActivityListPage() {
   const { t, i18n } = useTranslation();
@@ -147,15 +145,6 @@ export function ActivityListPage() {
     }
   };
 
-  const total = meta?.total ?? rows.length;
-  const from = total === 0 ? 0 : (page - 1) * limit + 1;
-  const to = total === 0 ? 0 : from + rows.length - 1;
-
-  const pagerButton =
-    'rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-white/[0.03]';
-  const exportButton =
-    'inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-white/[0.03]';
-
   return (
     <>
       <PageMeta title={`${t('activities.title')} | TVED`} description={t('app.fullName')} />
@@ -181,16 +170,16 @@ export function ActivityListPage() {
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              className={pagerButton}
+              className={outlineButtonClass}
               disabled={activeFilterCount === 0 && search === ''}
               onClick={resetFilters}
             >
               {t('common.reset')}
             </button>
-            <button type="button" className={exportButton} disabled={exporting !== null} onClick={() => onExport('filtered')}>
+            <button type="button" className={outlineButtonClass} disabled={exporting !== null} onClick={() => onExport('filtered')}>
               {exporting === 'filtered' ? t('common.exporting') : t('common.exportFiltered')}
             </button>
-            <button type="button" className={exportButton} disabled={exporting !== null} onClick={() => onExport('all')}>
+            <button type="button" className={outlineButtonClass} disabled={exporting !== null} onClick={() => onExport('all')}>
               {exporting === 'all' ? t('common.exporting') : t('common.exportAll')}
             </button>
           </div>
@@ -363,50 +352,19 @@ export function ActivityListPage() {
         </table>
       </div>
 
-      {/* Pager */}
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-            {t('common.rowsPerPage')}
-            <select
-              className={controlClass}
-              value={limit}
-              onChange={(e) => {
-                setLimit(Number(e.target.value));
-                setPage(1);
-              }}
-            >
-              {PAGE_SIZES.map((size) => (
-                <option key={size} value={size}>{size}</option>
-              ))}
-            </select>
-          </label>
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            {t('common.showingRange', { from, to, total })}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            className={pagerButton}
-            disabled={loading || page <= 1}
-            onClick={() => setPage((p) => Math.max(p - 1, 1))}
-          >
-            {t('common.previous')}
-          </button>
-          <span className="px-2 text-sm text-gray-600 dark:text-gray-400">
-            {t('common.page', { page, pages: meta?.pages ?? 1 })}
-          </span>
-          <button
-            type="button"
-            className={pagerButton}
-            disabled={loading || !(meta?.has_next ?? false)}
-            onClick={() => setPage((p) => p + 1)}
-          >
-            {t('common.next')}
-          </button>
-        </div>
-      </div>
+      <Pager
+        page={page}
+        limit={limit}
+        meta={meta}
+        rowCount={rows.length}
+        loading={loading}
+        onPageChange={setPage}
+        onLimitChange={(next) => {
+          setLimit(next);
+          setPage(1);
+        }}
+      />
+
     </>
   );
 }

@@ -177,7 +177,7 @@ export const ActivityService = {
        JOIN users u ON u.id = a.user_id
        LEFT JOIN divisions d ON d.id = a.division_id
        WHERE ${where}
-       ORDER BY a.start_date DESC, a.start_time DESC NULLS LAST
+       ORDER BY a.start_date DESC, a.start_time DESC NULLS LAST, a.id DESC
        LIMIT $${params.length - 1} OFFSET $${params.length}`,
       params
     );
@@ -512,6 +512,8 @@ export const ActivityService = {
       user_id?: number;
       division_id?: number;
       q?: string;
+      limit?: number;
+      offset?: number;
     } = {}
   ) {
     const visible = await HierarchyService.visibleUserIds(me);
@@ -550,20 +552,30 @@ export const ActivityService = {
                   OR u.staff_code ILIKE $${params.length})`;
     }
 
+    // A page size of 0 means "everything" — used by the exporter.
+    const limit = Math.min(Math.max(filters.limit ?? 0, 0) || EXPORT_MAX_ROWS, EXPORT_MAX_ROWS);
+    const offset = Math.max(filters.offset ?? 0, 0);
+    params.push(limit, offset);
+
     const result = await pool.query(
       `SELECT a.*, at.name_lo AS type_name_lo, at.name_en AS type_name_en,
               u.full_name AS owner_name, u.staff_code AS owner_staff_code,
-              d.name_lo AS division_name_lo, d.name_en AS division_name_en
+              d.name_lo AS division_name_lo, d.name_en AS division_name_en,
+              COUNT(*) OVER()::int AS total_count
        FROM activities a
        JOIN activity_types at ON at.id = a.activity_type_id
        JOIN users u ON u.id = a.user_id
        LEFT JOIN divisions d ON d.id = a.division_id
        WHERE ${where}
-       ORDER BY a.start_date DESC
-       LIMIT ${EXPORT_MAX_ROWS}`,
+       ORDER BY a.start_date DESC, a.id DESC
+       LIMIT $${params.length - 1} OFFSET $${params.length}`,
       params
     );
-    return result.rows;
+
+    // total_count rides along on every row; lift it off before returning.
+    const total = result.rows[0]?.total_count ?? 0;
+    const rows = result.rows.map(({ total_count, ...rest }: any) => rest);
+    return { rows, total: total as number, limit, offset };
   },
 
   /**
@@ -578,6 +590,8 @@ export const ActivityService = {
       division_id?: number;
       q?: string;
       not_submitted?: boolean;
+      limit?: number;
+      offset?: number;
     } = {}
   ) {
     const visible = await HierarchyService.visibleUserIds(me);
@@ -606,6 +620,10 @@ export const ActivityService = {
       ? `HAVING COUNT(a.id) FILTER (WHERE a.status IN ('submitted','approved')) = 0`
       : '';
 
+    const limit = Math.min(Math.max(filters.limit ?? 0, 0) || EXPORT_MAX_ROWS, EXPORT_MAX_ROWS);
+    const offset = Math.max(filters.offset ?? 0, 0);
+    params.push(limit, offset);
+
     const result = await pool.query(
       `SELECT u.id, u.full_name, u.staff_code, u.phone, u.email,
               d.name_en AS division_name_en, d.name_lo AS division_name_lo,
@@ -614,7 +632,8 @@ export const ActivityService = {
               COUNT(a.id)::int AS activity_count,
               COALESCE(SUM(a.duration_minutes),0)::int AS total_minutes,
               CASE WHEN COUNT(a.id) FILTER (WHERE a.status IN ('submitted','approved')) = 0
-                THEN true ELSE false END AS not_submitted
+                THEN true ELSE false END AS not_submitted,
+              COUNT(*) OVER()::int AS total_count
        FROM users u
        LEFT JOIN divisions d ON d.id = u.division_id
        LEFT JOIN activities a ON a.user_id = u.id AND a.deleted_at IS NULL
@@ -622,9 +641,13 @@ export const ActivityService = {
        WHERE ${where}
        GROUP BY u.id, u.full_name, u.staff_code, u.phone, u.email, d.name_en, d.name_lo
        ${having}
-       ORDER BY u.full_name`,
+       ORDER BY u.full_name, u.id
+       LIMIT $${params.length - 1} OFFSET $${params.length}`,
       params
     );
-    return { rows: result.rows, period: { start, end } };
+
+    const total = result.rows[0]?.total_count ?? 0;
+    const rows = result.rows.map(({ total_count, ...rest }: any) => rest);
+    return { rows, total: total as number, limit, offset, period: { start, end } };
   },
 };
