@@ -503,18 +503,128 @@ export const ActivityService = {
     return result.rows[0];
   },
 
-  async approvalsQueue(me: HierarchyUser) {
+  async approvalsQueue(
+    me: HierarchyUser,
+    filters: {
+      start_date?: string;
+      end_date?: string;
+      activity_type_id?: number;
+      user_id?: number;
+      division_id?: number;
+      q?: string;
+    } = {}
+  ) {
     const visible = await HierarchyService.visibleUserIds(me);
+    const params: unknown[] = [visible, me.id];
+    // The queue is always "submitted work by someone other than me that I can
+    // see" — filters narrow that set, they never widen it.
+    let where = `a.deleted_at IS NULL AND a.status = 'submitted'
+                 AND a.user_id = ANY($1::int[]) AND a.user_id <> $2`;
+
+    if (filters.start_date) {
+      params.push(filters.start_date);
+      where += ` AND a.end_date >= $${params.length}`;
+    }
+    if (filters.end_date) {
+      params.push(filters.end_date);
+      where += ` AND a.start_date <= $${params.length}`;
+    }
+    if (filters.activity_type_id) {
+      params.push(filters.activity_type_id);
+      where += ` AND a.activity_type_id = $${params.length}`;
+    }
+    if (filters.user_id) {
+      params.push(filters.user_id);
+      where += ` AND a.user_id = $${params.length}`;
+    }
+    if (filters.division_id) {
+      params.push(filters.division_id);
+      where += ` AND a.division_id = $${params.length}`;
+    }
+    if (filters.q && filters.q.trim()) {
+      params.push(`%${filters.q.trim()}%`);
+      where += ` AND (a.title_lo ILIKE $${params.length}
+                  OR a.title_en ILIKE $${params.length}
+                  OR a.location ILIKE $${params.length}
+                  OR u.full_name ILIKE $${params.length}
+                  OR u.staff_code ILIKE $${params.length})`;
+    }
+
     const result = await pool.query(
-      `SELECT a.*, at.name_lo AS type_name_lo, at.name_en AS type_name_en, u.full_name AS owner_name
+      `SELECT a.*, at.name_lo AS type_name_lo, at.name_en AS type_name_en,
+              u.full_name AS owner_name, u.staff_code AS owner_staff_code,
+              d.name_lo AS division_name_lo, d.name_en AS division_name_en
        FROM activities a
        JOIN activity_types at ON at.id = a.activity_type_id
        JOIN users u ON u.id = a.user_id
-       WHERE a.deleted_at IS NULL AND a.status = 'submitted'
-         AND a.user_id = ANY($1::int[]) AND a.user_id <> $2
-       ORDER BY a.start_date DESC`,
-      [visible, me.id]
+       LEFT JOIN divisions d ON d.id = a.division_id
+       WHERE ${where}
+       ORDER BY a.start_date DESC
+       LIMIT ${EXPORT_MAX_ROWS}`,
+      params
     );
     return result.rows;
+  },
+
+  /**
+   * Per-staff reporting summary for the team page: everyone visible to `me`
+   * except me, with their activity counts over the period.
+   */
+  async teamSummary(
+    me: HierarchyUser,
+    filters: {
+      start_date?: string;
+      end_date?: string;
+      division_id?: number;
+      q?: string;
+      not_submitted?: boolean;
+    } = {}
+  ) {
+    const visible = await HierarchyService.visibleUserIds(me);
+    const today = new Date();
+    const start =
+      filters.start_date ||
+      new Date(new Date().setDate(today.getDate() - 7)).toISOString().slice(0, 10);
+    const end = filters.end_date || today.toISOString().slice(0, 10);
+
+    const params: unknown[] = [visible, start, end, me.id];
+    let where = `u.id = ANY($1::int[]) AND u.id <> $4 AND u.deleted_at IS NULL AND u.is_active = true`;
+
+    if (filters.division_id) {
+      params.push(filters.division_id);
+      where += ` AND u.division_id = $${params.length}`;
+    }
+    if (filters.q && filters.q.trim()) {
+      params.push(`%${filters.q.trim()}%`);
+      where += ` AND (u.full_name ILIKE $${params.length}
+                  OR u.staff_code ILIKE $${params.length}
+                  OR u.email ILIKE $${params.length}
+                  OR u.phone ILIKE $${params.length})`;
+    }
+
+    const having = filters.not_submitted
+      ? `HAVING COUNT(a.id) FILTER (WHERE a.status IN ('submitted','approved')) = 0`
+      : '';
+
+    const result = await pool.query(
+      `SELECT u.id, u.full_name, u.staff_code, u.phone, u.email,
+              d.name_en AS division_name_en, d.name_lo AS division_name_lo,
+              COUNT(a.id) FILTER (WHERE a.status = 'submitted')::int AS submitted_count,
+              COUNT(a.id) FILTER (WHERE a.status = 'approved')::int AS approved_count,
+              COUNT(a.id)::int AS activity_count,
+              COALESCE(SUM(a.duration_minutes),0)::int AS total_minutes,
+              CASE WHEN COUNT(a.id) FILTER (WHERE a.status IN ('submitted','approved')) = 0
+                THEN true ELSE false END AS not_submitted
+       FROM users u
+       LEFT JOIN divisions d ON d.id = u.division_id
+       LEFT JOIN activities a ON a.user_id = u.id AND a.deleted_at IS NULL
+         AND a.start_date <= $3 AND a.end_date >= $2
+       WHERE ${where}
+       GROUP BY u.id, u.full_name, u.staff_code, u.phone, u.email, d.name_en, d.name_lo
+       ${having}
+       ORDER BY u.full_name`,
+      params
+    );
+    return { rows: result.rows, period: { start, end } };
   },
 };

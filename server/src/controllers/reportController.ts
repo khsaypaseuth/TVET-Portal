@@ -1,5 +1,4 @@
 import { Response } from 'express';
-import ExcelJS from 'exceljs';
 import puppeteer from 'puppeteer';
 import path from 'path';
 import fs from 'fs';
@@ -7,6 +6,7 @@ import { fileURLToPath } from 'url';
 import { AuthRequest } from '../middleware/auth.js';
 import { HierarchyService } from '../services/HierarchyService.js';
 import { ReportService, ReportFilter } from '../services/ReportService.js';
+import { ExcelService, sendWorkbook, describeFilters } from '../services/ExcelService.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -26,6 +26,7 @@ function parseFilter(query: AuthRequest['query']): ReportFilter {
       ? String(query.activity_type_ids).split(',').map(Number)
       : undefined,
     statuses: query.statuses ? String(query.statuses).split(',') : undefined,
+    q: (query.q as string | undefined) || undefined,
   };
 }
 
@@ -95,30 +96,39 @@ export const exportExcel = async (req: AuthRequest, res: Response) => {
           ? await ReportService.departmentSummary(user, filter)
           : type === 'compliance'
             ? await ReportService.compliance(user, filter)
-            : await ReportService.individual(user, filter);
+            : type === 'meetings'
+              ? await ReportService.meetingsRegister(user, filter)
+              : await ReportService.individual(user, filter);
 
-    const workbook = new ExcelJS.Workbook();
-    const sheet = workbook.addWorksheet('TVED Report');
-    sheet.addRow(['TVED Activity & Task Tracking System']);
-    sheet.addRow([`Period: ${filter.start_date} → ${filter.end_date}`]);
-    sheet.addRow([]);
+    const lao = (req.query.lang || 'lo') === 'lo';
+    const titles: Record<string, [string, string]> = {
+      individual: ['ລາຍງານລາຍບຸກຄົນ', 'Individual report'],
+      division: ['ລາຍງານຂັ້ນພະແນກ', 'Division report'],
+      department: ['ລາຍງານຂັ້ນກົມ', 'Department report'],
+      meetings: ['ບັນຊີກອງປະຊຸມ', 'Meetings register'],
+      compliance: ['ລາຍງານການປະຕິບັດການລາຍງານ', 'Reporting compliance'],
+    };
+    const [titleLo, titleEn] = titles[type] || titles.individual;
 
-    const rows = report.rows as Record<string, unknown>[];
-    if (rows.length) {
-      const keys = Object.keys(rows[0]).filter((k) => k !== 'participants');
-      sheet.addRow(keys);
-      for (const row of rows) {
-        sheet.addRow(keys.map((k) => row[k] as string | number | boolean | null));
-      }
-    }
+    const workbook = ExcelService.reportWorkbook(report.rows as any[], {
+      lao,
+      subtitle: lao ? titleLo : titleEn,
+      scopeLine: describeFilters(
+        {
+          scope: filter.scope,
+          statuses: filter.statuses?.join('|'),
+          activity_type_ids: filter.activity_type_ids?.join('|'),
+          user_ids: filter.user_ids?.join('|'),
+          division_ids: filter.division_ids?.join('|'),
+          q: filter.q,
+        },
+        lao
+      ),
+      period: { start: filter.start_date, end: filter.end_date },
+    });
 
-    res.setHeader(
-      'Content-Type',
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-    );
-    res.setHeader('Content-Disposition', `attachment; filename="tved-${type}-report.xlsx"`);
-    await workbook.xlsx.write(res);
-    res.end();
+    const stamp = new Date().toISOString().slice(0, 10);
+    return sendWorkbook(res, workbook, `tved-${type}-report-${stamp}.xlsx`);
   } catch (e) {
     console.error(e);
     return res.status(500).json({ error: 'Internal server error' });

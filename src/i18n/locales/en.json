@@ -75,7 +75,11 @@
     "allStaff": "All staff",
     "allDivisions": "All divisions",
     "myRecords": "My own records",
-    "filters": "Filters"
+    "filters": "Filters",
+    "notSubmittedOnly": "Not submitted only",
+    "exportExcel": "Export Excel",
+    "pendingApprovals": "Pending approvals",
+    "results": "{{count}} results"
   },
   "auth": {
     "signInTitle": "Sign In",

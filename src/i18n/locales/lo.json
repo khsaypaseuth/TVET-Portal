@@ -75,7 +75,11 @@
     "allStaff": "ພະນັກງານທັງໝົດ",
     "allDivisions": "ທຸກພະແນກ",
     "myRecords": "ຂໍ້ມູນຂອງຂ້ອຍ",
-    "filters": "ການກັ່ນຕອງ"
+    "filters": "ການກັ່ນຕອງ",
+    "notSubmittedOnly": "ສະເພາະຜູ້ຍັງບໍ່ໄດ້ສົ່ງ",
+    "exportExcel": "ສົ່ງອອກ Excel",
+    "pendingApprovals": "ລາຍການລໍຖ້າອະນຸມັດ",
+    "results": "{{count}} ລາຍການ"
   },
   "auth": {
     "signInTitle": "ເຂົ້າສູ່ລະບົບ",

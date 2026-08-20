@@ -10,6 +10,19 @@ export interface ReportFilter {
   division_ids?: number[];
   activity_type_ids?: number[];
   statuses?: string[];
+  /** Free-text search; what it matches depends on the report's row shape. */
+  q?: string;
+}
+
+/**
+ * Appends a free-text clause over the given columns and returns the SQL.
+ * Returns '' when no search term was supplied.
+ */
+function searchClause(filter: ReportFilter, params: unknown[], columns: string[]) {
+  if (!filter.q || !filter.q.trim()) return '';
+  params.push(`%${filter.q.trim()}%`);
+  const idx = params.length;
+  return `AND (${columns.map((c) => `${c} ILIKE $${idx}`).join(' OR ')})`;
 }
 
 async function resolveUserIds(me: HierarchyUser, filter: ReportFilter): Promise<number[]> {
@@ -50,6 +63,9 @@ export const ReportService = {
     const typeSql = filter.activity_type_ids?.length
       ? `AND a.activity_type_id = ANY($${params.length}::int[])`
       : '';
+    const searchSql = searchClause(filter, params, [
+      'a.title_lo', 'a.title_en', 'a.location', 'u.full_name', 'u.staff_code',
+    ]);
 
     const result = await pool.query(
       `SELECT a.id, a.start_date, a.end_date, a.start_time, a.end_time, a.is_all_day,
@@ -62,7 +78,7 @@ export const ReportService = {
        WHERE a.deleted_at IS NULL
          AND a.user_id = ANY($1::int[])
          AND a.start_date <= $3 AND a.end_date >= $2
-         ${statusSql} ${typeSql}
+         ${statusSql} ${typeSql} ${searchSql}
        ORDER BY a.start_date, a.start_time NULLS LAST`,
       params
     );
@@ -78,6 +94,10 @@ export const ReportService = {
     const params: unknown[] = [userIds, filter.start_date, filter.end_date];
     const statusSql = statusClause(filter, params);
 
+    const searchSql = searchClause(filter, params, [
+      'u.full_name', 'u.staff_code', 'd.name_lo', 'd.name_en',
+    ]);
+
     const result = await pool.query(
       `SELECT u.id AS user_id, u.full_name, u.staff_code, d.name_lo AS division_name_lo, d.name_en AS division_name_en,
               COUNT(a.id)::int AS activity_count,
@@ -87,7 +107,7 @@ export const ReportService = {
        LEFT JOIN divisions d ON d.id = u.division_id
        LEFT JOIN activities a ON a.user_id = u.id AND a.deleted_at IS NULL
          AND a.start_date <= $3 AND a.end_date >= $2 ${statusSql.replace(/a\.status/g, 'a.status')}
-       WHERE u.id = ANY($1::int[]) AND u.deleted_at IS NULL
+       WHERE u.id = ANY($1::int[]) AND u.deleted_at IS NULL ${searchSql}
        GROUP BY u.id, u.full_name, u.staff_code, d.name_lo, d.name_en
        ORDER BY u.full_name`,
       params
@@ -100,6 +120,8 @@ export const ReportService = {
     const params: unknown[] = [visible, filter.start_date, filter.end_date];
     const statusSql = statusClause(filter, params);
 
+    const searchSql = searchClause(filter, params, ['d.name_lo', 'd.name_en', 'd.code']);
+
     const result = await pool.query(
       `SELECT d.id AS division_id, d.name_lo, d.name_en, d.code,
               COUNT(a.id)::int AS activity_count,
@@ -109,7 +131,7 @@ export const ReportService = {
        LEFT JOIN users u ON u.division_id = d.id AND u.id = ANY($1::int[]) AND u.deleted_at IS NULL
        LEFT JOIN activities a ON a.user_id = u.id AND a.deleted_at IS NULL
          AND a.start_date <= $3 AND a.end_date >= $2 ${statusSql}
-       WHERE d.is_active = true
+       WHERE d.is_active = true ${searchSql}
        GROUP BY d.id, d.name_lo, d.name_en, d.code
        ORDER BY d.sort_order, d.name_en`,
       params
@@ -120,12 +142,15 @@ export const ReportService = {
   async meetingsRegister(me: HierarchyUser, filter: ReportFilter) {
     const userIds = await resolveUserIds(me, filter);
     const params: unknown[] = [userIds, filter.start_date, filter.end_date];
+    const searchSql = searchClause(filter, params, [
+      'a.title_lo', 'a.title_en', 'a.location', 'u.full_name',
+    ]);
     const result = await pool.query(
       `SELECT a.*, at.code AS type_code, at.name_lo AS type_name_lo, at.name_en AS type_name_en,
               u.full_name AS owner_name,
               COALESCE(json_agg(json_build_object(
                 'user_id', p.user_id, 'external_name', p.external_name, 'role_in_activity', p.role_in_activity
-              ) FILTER (WHERE p.id IS NOT NULL), '[]') AS participants
+              )) FILTER (WHERE p.id IS NOT NULL), '[]'::json) AS participants
        FROM activities a
        JOIN activity_types at ON at.id = a.activity_type_id
        JOIN users u ON u.id = a.user_id
@@ -134,7 +159,7 @@ export const ReportService = {
          AND a.user_id = ANY($1::int[])
          AND a.start_date <= $3 AND a.end_date >= $2
          AND at.code IN ('MEETING', 'CONFERENCE')
-         AND a.status IN ('approved', 'submitted')
+         AND a.status IN ('approved', 'submitted') ${searchSql}
        GROUP BY a.id, at.code, at.name_lo, at.name_en, u.full_name
        ORDER BY a.start_date`,
       params
@@ -144,6 +169,8 @@ export const ReportService = {
 
   async compliance(me: HierarchyUser, filter: ReportFilter) {
     const userIds = await resolveUserIds(me, { ...filter, scope: filter.scope || 'division' });
+    const params: unknown[] = [userIds, filter.start_date, filter.end_date];
+    const searchSql = searchClause(filter, params, ['u.full_name', 'u.staff_code', 'd.name_en']);
     const result = await pool.query(
       `SELECT u.id, u.full_name, u.staff_code, d.name_en AS division_name,
               COUNT(a.id)::int AS submitted_count,
@@ -154,10 +181,10 @@ export const ReportService = {
        LEFT JOIN activities a ON a.user_id = u.id AND a.deleted_at IS NULL
          AND a.start_date <= $3 AND a.end_date >= $2
          AND a.status IN ('submitted', 'approved')
-       WHERE u.id = ANY($1::int[]) AND u.is_active = true AND u.deleted_at IS NULL
+       WHERE u.id = ANY($1::int[]) AND u.is_active = true AND u.deleted_at IS NULL ${searchSql}
        GROUP BY u.id, u.full_name, u.staff_code, d.name_en
        ORDER BY has_submitted ASC, u.full_name`,
-      [userIds, filter.start_date, filter.end_date]
+      params
     );
     return { rows: result.rows };
   },

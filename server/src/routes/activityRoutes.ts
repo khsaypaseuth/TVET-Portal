@@ -5,6 +5,8 @@ import {
   listActivityTypes,
   listActivities,
   exportActivitiesExcel,
+  exportApprovalsExcel,
+  exportTeamExcel,
   getActivity,
   createActivity,
   updateActivity,
@@ -43,7 +45,9 @@ const router = Router();
 router.use(authenticateToken);
 
 router.get('/types', listActivityTypes);
+router.get('/approvals/excel', exportApprovalsExcel);
 router.get('/approvals', approvalsQueue);
+router.get('/team/excel', exportTeamExcel);
 router.get('/team', myTeam);
 router.get('/excel', exportActivitiesExcel);
 router.get('/', listActivities);

@@ -184,22 +184,37 @@ class ApiService {
       `/activities${qs ? `?${qs}` : ''}`
     );
   }
-  /** Downloads the activity list as .xlsx — either the current filter, or everything visible. */
-  async downloadActivitiesExcel(
-    params: Record<string, string | number | undefined> = {},
-    scope: 'filtered' | 'all' = 'filtered'
+  /** Fetches a file endpoint and returns the blob plus its server-side filename. */
+  private async downloadFile(
+    path: string,
+    params: Record<string, string | number | undefined>,
+    fallbackName: string
   ) {
-    const qs = toQuery(scope === 'all' ? { all: 1, lang: params.lang } : params);
-    const res = await fetch(`${API_BASE_URL}/activities/excel?${qs}`, {
+    const res = await fetch(`${API_BASE_URL}${path}?${toQuery(params)}`, {
       headers: { Authorization: `Bearer ${this.getAuthToken()}` },
     });
     if (!res.ok) throw new Error('Export failed');
     const disposition = res.headers.get('Content-Disposition') || '';
     const match = disposition.match(/filename="?([^";]+)"?/);
-    return {
-      blob: await res.blob(),
-      filename: match?.[1] || `tved-activities-${scope}.xlsx`,
-    };
+    return { blob: await res.blob(), filename: match?.[1] || fallbackName };
+  }
+
+  /** Downloads the activity list as .xlsx — either the current filter, or everything visible. */
+  downloadActivitiesExcel(
+    params: Record<string, string | number | undefined> = {},
+    scope: 'filtered' | 'all' = 'filtered'
+  ) {
+    return this.downloadFile(
+      '/activities/excel',
+      scope === 'all' ? { all: 1, lang: params.lang } : params,
+      `tved-activities-${scope}.xlsx`
+    );
+  }
+  downloadApprovalsExcel(params: Record<string, string | number | undefined> = {}) {
+    return this.downloadFile('/activities/approvals/excel', params, 'tved-approvals.xlsx');
+  }
+  downloadTeamExcel(params: Record<string, string | number | undefined> = {}) {
+    return this.downloadFile('/activities/team/excel', params, 'tved-team.xlsx');
   }
   getActivity(id: number) {
     return this.request<{ success: boolean; data: any }>(`/activities/${id}`);
@@ -240,14 +255,17 @@ class ApiService {
       body: JSON.stringify({ ids }),
     });
   }
-  getApprovals() {
-    return this.request<{ success: boolean; data: any[] }>('/activities/approvals');
+  getApprovals(params: Record<string, string | number | undefined> = {}) {
+    const qs = toQuery(params);
+    return this.request<{ success: boolean; data: any[] }>(
+      `/activities/approvals${qs ? `?${qs}` : ''}`
+    );
   }
-  getMyTeam(start_date?: string, end_date?: string) {
-    const q = new URLSearchParams();
-    if (start_date) q.set('start_date', start_date);
-    if (end_date) q.set('end_date', end_date);
-    return this.request<{ success: boolean; data: any[] }>(`/activities/team?${q}`);
+  getMyTeam(params: Record<string, string | number | undefined> = {}) {
+    const qs = toQuery(params);
+    return this.request<{ success: boolean; data: any[]; period?: { start: string; end: string } }>(
+      `/activities/team${qs ? `?${qs}` : ''}`
+    );
   }
 
   // Reports

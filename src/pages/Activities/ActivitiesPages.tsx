@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import PageMeta from '../../components/common/PageMeta';
 import ActionIcons from '../../components/common/ActionIcons';
@@ -49,8 +49,17 @@ export function ActivityListPage() {
   const { user } = useAuth();
   const [rows, setRows] = useState<any[]>([]);
   const [meta, setMeta] = useState<ActivityListMeta | null>(null);
-  const [filters, setFilters] = useState({ ...EMPTY_FILTERS });
-  const [search, setSearch] = useState('');
+  // Deep links such as /activities?user_id=12 (from the team page) preload the filter bar.
+  const [searchParams] = useSearchParams();
+  const [filters, setFilters] = useState(() => {
+    const initial = { ...EMPTY_FILTERS };
+    (Object.keys(initial) as (keyof typeof initial)[]).forEach((key) => {
+      const value = searchParams.get(key);
+      if (value) initial[key] = value;
+    });
+    return initial;
+  });
+  const [search, setSearch] = useState(searchParams.get('q') || '');
   const [types, setTypes] = useState<any[]>([]);
   const [team, setTeam] = useState<any[]>([]);
   const [divisions, setDivisions] = useState<any[]>([]);

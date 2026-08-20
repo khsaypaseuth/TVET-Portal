@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import PageMeta from '../../components/common/PageMeta';
 import PeriodFilter from '../../components/common/PeriodFilter';
 import ActionIcons from '../../components/common/ActionIcons';
+import FilterPanel, { Field, controlClass } from '../../components/common/FilterPanel';
+import { useAuth } from '../../context/AuthContext';
 import { apiService } from '../../services/api';
 import { PeriodPreset, formatHours, resolvePeriod } from '../../utils/period';
 import { DownloadIcon, FileIcon } from '../../icons';
@@ -17,14 +19,37 @@ export default function ReportsPage() {
   const [end, setEnd] = useState(initial.end);
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  const { user } = useAuth();
+  const [search, setSearch] = useState('');
+  const [extra, setExtra] = useState({
+    q: '',
+    activity_type_ids: '',
+    statuses: '',
+    user_ids: '',
+    division_ids: '',
+  });
+  const [types, setTypes] = useState<any[]>([]);
+  const [team, setTeam] = useState<any[]>([]);
+  const [divisions, setDivisions] = useState<any[]>([]);
+
+  const scope = user?.data_scope || 'own';
+  const canFilterStaff = scope !== 'own';
+  const canFilterDivision = scope === 'department' || scope === 'assigned_divisions';
+
+  // Only non-empty filters are sent, so an untouched control never narrows a report.
+  const activeExtra = useMemo(
+    () => Object.fromEntries(Object.entries(extra).filter(([, v]) => v !== '')) as Record<string, string>,
+    [extra]
+  );
 
   const params = useMemo(
     () => ({
       start_date: start,
       end_date: end,
       scope: type === 'individual' ? 'me' : type === 'department' ? 'department' : 'division',
+      ...activeExtra,
     }),
-    [start, end, type]
+    [start, end, type, activeExtra]
   );
 
   const run = (override?: { start?: string; end?: string; reportType?: string }) => {
@@ -40,6 +65,7 @@ export default function ReportsPage() {
           : reportType === 'department'
             ? 'department'
             : 'division',
+      ...activeExtra,
     };
     setLoading(true);
     apiService
@@ -54,6 +80,32 @@ export default function ReportsPage() {
     // initial load only
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    apiService.getActivityTypes().then((r) => setTypes(r.data)).catch(console.error);
+    if (canFilterStaff) {
+      apiService.getMyTeam().then((r) => setTeam(r.data)).catch(console.error);
+    }
+    if (canFilterDivision) {
+      apiService.getDivisions().then((r) => setDivisions(r.data)).catch(console.error);
+    }
+  }, [canFilterStaff, canFilterDivision]);
+
+  // Typing shouldn't re-run the report on every keystroke.
+  useEffect(() => {
+    const timer = setTimeout(() => setExtra((f) => (f.q === search ? f : { ...f, q: search })), 350);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  const firstRun = useRef(true);
+  useEffect(() => {
+    if (firstRun.current) {
+      firstRun.current = false;
+      return;
+    }
+    run();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeExtra]);
 
   const onPresetChange = (p: PeriodPreset) => {
     setPreset(p);
@@ -127,19 +179,100 @@ export default function ReportsPage() {
         />
       </div>
 
-      <div className="mb-4 flex flex-wrap gap-3">
-        <select
-          className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
-          value={type}
-          onChange={(e) => onTypeChange(e.target.value)}
-        >
-          <option value="individual">{t('reports.individual')}</option>
-          <option value="division">{t('reports.division')}</option>
-          <option value="department">{t('reports.department')}</option>
-          <option value="meetings">{t('reports.meetings')}</option>
-          <option value="compliance">{t('reports.compliance')}</option>
-        </select>
-      </div>
+      <FilterPanel
+        activeCount={Object.keys(activeExtra).length}
+        resetDisabled={Object.keys(activeExtra).length === 0 && search === ''}
+        onReset={() => {
+          setSearch('');
+          setExtra({ q: '', activity_type_ids: '', statuses: '', user_ids: '', division_ids: '' });
+        }}
+      >
+        <Field label={t('reports.title')}>
+          <select
+            className={`w-full ${controlClass}`}
+            value={type}
+            onChange={(e) => onTypeChange(e.target.value)}
+          >
+            <option value="individual">{t('reports.individual')}</option>
+            <option value="division">{t('reports.division')}</option>
+            <option value="department">{t('reports.department')}</option>
+            <option value="meetings">{t('reports.meetings')}</option>
+            <option value="compliance">{t('reports.compliance')}</option>
+          </select>
+        </Field>
+
+        <Field label={t('common.search')} wide>
+          <input
+            type="search"
+            className={`w-full ${controlClass}`}
+            placeholder={t('common.searchActivities')}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </Field>
+
+        <Field label={t('activities.type')}>
+          <select
+            className={`w-full ${controlClass}`}
+            value={extra.activity_type_ids}
+            onChange={(e) => setExtra((f) => ({ ...f, activity_type_ids: e.target.value }))}
+          >
+            <option value="">{t('common.allTypes')}</option>
+            {types.map((ty) => (
+              <option key={ty.id} value={ty.id}>{i18n.language === 'lo' ? ty.name_lo : ty.name_en}</option>
+            ))}
+          </select>
+        </Field>
+
+        <Field label={t('common.status')}>
+          <select
+            className={`w-full ${controlClass}`}
+            value={extra.statuses}
+            onChange={(e) => setExtra((f) => ({ ...f, statuses: e.target.value }))}
+          >
+            <option value="">{t('common.allStatuses')}</option>
+            {['draft', 'submitted', 'approved', 'rejected'].map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
+        </Field>
+
+        {canFilterStaff && (
+          <Field label={t('common.staff')}>
+            <select
+              className={`w-full ${controlClass}`}
+              value={extra.user_ids}
+              onChange={(e) => setExtra((f) => ({ ...f, user_ids: e.target.value }))}
+            >
+              <option value="">{t('common.allStaff')}</option>
+              {team.map((member) => (
+                <option key={member.id} value={member.id}>
+                  {member.full_name} ({member.staff_code})
+                </option>
+              ))}
+            </select>
+          </Field>
+        )}
+
+        {canFilterDivision && (
+          <Field label={t('common.division')}>
+            <select
+              className={`w-full ${controlClass}`}
+              value={extra.division_ids}
+              onChange={(e) => setExtra((f) => ({ ...f, division_ids: e.target.value }))}
+            >
+              <option value="">{t('common.allDivisions')}</option>
+              {divisions.map((d) => (
+                <option key={d.id} value={d.id}>{i18n.language === 'lo' ? d.name_lo : d.name_en}</option>
+              ))}
+            </select>
+          </Field>
+        )}
+      </FilterPanel>
+
+      <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">
+        {t('common.results', { count: (data?.rows || []).length })}
+      </p>
 
       {data?.total_hours !== undefined && (
         <p className="mb-3 text-sm text-gray-600 dark:text-gray-400">
